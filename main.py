@@ -15,22 +15,26 @@
 
 """Training and evaluation"""
 
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 5, 7'
 import run_lib
 from absl import app
 from absl import flags
 from ml_collections.config_flags import config_flags
 import logging
-import os
+
 import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
 config_flags.DEFINE_config_file(
-  "config", None, "Training configuration.", lock_config=True)
-flags.DEFINE_string("workdir", None, "Work directory.")
-flags.DEFINE_enum("mode", None, ["train", "eval"], "Running mode: train or eval")
+  "config", 'configs/vp/ddpm/cifar10.py', "Training configuration.", lock_config=True)
+flags.DEFINE_string("workdir", 'vp_cifar10_ddpm', "Work directory.")
+flags.DEFINE_enum("mode", 'eval', ["train", "eval", "fid_stats"], "Running mode: train or eval")
 flags.DEFINE_string("eval_folder", "eval",
                     "The folder name for storing evaluation results")
+flags.DEFINE_string("fid_folder", "assets/stats",
+                    "The folder name for storing FID statistics")
 flags.mark_flags_as_required(["workdir", "config", "mode"])
 
 
@@ -52,6 +56,10 @@ def main(argv):
   elif FLAGS.mode == "eval":
     # Run the evaluation pipeline
     run_lib.evaluate(FLAGS.config, FLAGS.workdir, FLAGS.eval_folder)
+
+  elif FLAGS.mode == "fid_stats":
+    # Calculate the FID statistics
+    run_lib.fid_stats(FLAGS.config, FLAGS.fid_folder)
   else:
     raise ValueError(f"Mode {FLAGS.mode} not recognized.")
 

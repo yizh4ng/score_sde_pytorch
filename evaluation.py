@@ -19,7 +19,7 @@ import jax
 import numpy as np
 import six
 import tensorflow as tf
-import tensorflow_gan as tfgan
+# import tensorflow_gan as tfgan
 import tensorflow_hub as tfhub
 
 INCEPTION_TFHUB = 'https://tfhub.dev/tensorflow/tfgan/eval/inception/1'
@@ -86,6 +86,57 @@ def classifier_fn_from_tfhub(output_fields, inception_model,
   return _classifier_fn
 
 
+def run_classifier_fn(input_tensor,
+                      classifier_fn,
+                      num_batches=1,
+                      dtypes=None,
+                      name='RunClassifierFn'):
+  """Runs a network from a TF-Hub module.
+
+  If there are multiple outputs, cast them to tf.float32.
+
+  Args:
+    input_tensor: Input tensors.
+    classifier_fn: A function that takes a single argument and returns the
+      outputs of the classifier. If `num_batches` is greater than 1, the
+      structure of the outputs of `classifier_fn` must match the structure of
+      `dtypes`.
+    num_batches: Number of batches to split `tensor` in to in order to
+      efficiently run them through the classifier network. This is useful if
+      running a large batch would consume too much memory, but running smaller
+      batches is feasible.
+    dtypes: If `classifier_fn` returns more than one element or `num_batches` is
+      greater than 1, `dtypes` must have the same structure as the return value
+      of `classifier_fn` but with each output replaced by the expected dtype of
+      the output. If `classifier_fn` returns on element or `num_batches` is 1,
+      then `dtype` can be `None.
+    name: Name scope for classifier.
+
+  Returns:
+    The output of the module, or just `outputs`.
+
+  Raises:
+    ValueError: If `classifier_fn` return multiple outputs but `dtypes` isn't
+      specified, or is incorrect.
+  """
+  if num_batches > 1:
+    # Compute the classifier splits using the memory-efficient `map_fn`.
+    input_list = tf.split(input_tensor, num_or_size_splits=num_batches)
+    classifier_outputs = tf.map_fn(
+      fn=classifier_fn,
+      elems=tf.stack(input_list),
+      dtype=dtypes,
+      parallel_iterations=1,
+      back_prop=False,
+      swap_memory=True,
+      name=name)
+    classifier_outputs = tf.nest.map_structure(
+      lambda x: tf.concat(tf.unstack(x), 0), classifier_outputs)
+  else:
+    classifier_outputs = classifier_fn(input_tensor)
+
+  return classifier_outputs
+
 @tf.function
 def run_inception_jit(inputs,
                       inception_model,
@@ -97,7 +148,7 @@ def run_inception_jit(inputs,
   else:
     inputs = tf.cast(inputs, tf.float32) / 255.
 
-  return tfgan.eval.run_classifier_fn(
+  return run_classifier_fn(
     inputs,
     num_batches=num_batches,
     classifier_fn=classifier_fn_from_tfhub(None, inception_model),
@@ -122,10 +173,12 @@ def run_inception_distributed(input_tensor,
       logits of the inception network respectively.
   """
   num_tpus = jax.local_device_count()
+  # num_tpus = 0
   input_tensors = tf.split(input_tensor, num_tpus, axis=0)
   pool3 = []
   logits = [] if not inceptionv3 else None
   device_format = '/TPU:{}' if 'TPU' in str(jax.devices()[0]) else '/GPU:{}'
+  # device_format = '/GPU:{}'
   for i, tensor in enumerate(input_tensors):
     with tf.device(device_format.format(i)):
       tensor_on_device = tf.identity(tensor)
