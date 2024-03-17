@@ -69,7 +69,7 @@ def get_config():
   evaluate.end_ckpt = 8
   evaluate.num_samples = 10000
   evaluate.enable_loss = False
-  evaluate.batch_size = 2000
+  evaluate.batch_size = 8
   evaluate.enable_sampling = True
   
   return config

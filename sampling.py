@@ -71,6 +71,7 @@ def get_sampling_fn(config, sde, shape, inverse_scalar, eps):
       trailing dimensions matching `shape`.
   """
 
+    print(config.sampling.predictor.lower())
     predictor = get_predictor(config.sampling.predictor.lower())
 
     sampling_fn = get_pc_sampler(sde=sde,
@@ -252,6 +253,7 @@ def get_pc_sampler(sde, shape, predictor,inverse_scalar,
             h = timesteps - np.append(timesteps, 0)[
                             1:]  # true step-size: difference between current time and next time (only the new predictor classes will use h, others will ignore)
             N = sde.N - 1
+            print(x.shape)
             with tqdm(total=sde.N) as pbar:
                 for i in range(sde.N):
                     t = timesteps[i]
@@ -286,6 +288,7 @@ def get_pc_sampler(sde, shape, predictor,inverse_scalar,
             x_prev = x
 
             N = 0
+            print(x.shape)
             with tqdm(total=sde.N) as pbar:
                 while (torch.abs(t - eps) > 1e-6).any():
                     x, x_prev, t, h = predictor_update_fn(x, t, h, x_prev=x_prev, model=model)

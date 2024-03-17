@@ -22,7 +22,8 @@ def get_default_configs():
   # sampling
   config.sampling = sampling = ml_collections.ConfigDict()
   sampling.n_steps_each = 1
-  sampling.noise_removal = True
+  sampling.noise_removal = False
+  # sampling.noise_removal = False
   sampling.probability_flow = False
   sampling.snr = 0.16
 
@@ -43,7 +44,7 @@ def get_default_configs():
   config.eval = evaluate = ml_collections.ConfigDict()
   evaluate.begin_ckpt = 8
   evaluate.end_ckpt = 8
-  evaluate.batch_size = 3000
+  evaluate.batch_size = 8
   evaluate.enable_sampling = True
   evaluate.sampling = True
   evaluate.num_samples = 10000
@@ -64,7 +65,8 @@ def get_default_configs():
   config.model = model = ml_collections.ConfigDict()
   model.sigma_min = 0.01
   model.sigma_max = 50
-  model.num_scales = 1000
+  # model.num_scales = 1000
+  model.num_scales = 10
   model.beta_min = 0.1
   model.beta_max = 20.
   model.dropout = 0.1

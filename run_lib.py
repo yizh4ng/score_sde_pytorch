@@ -342,7 +342,7 @@ def evaluate(config,
           tf.io.gfile.makedirs(this_sample_dir)
           samples, n = sampling_fn(score_model)
 
-          to_draw_sample = samples[:9]
+          to_draw_sample = samples[:1]
           nrow = int(np.sqrt(to_draw_sample.shape[0]))
           image_grid = make_grid(to_draw_sample, nrow, padding=2)
           with tf.io.gfile.GFile(
