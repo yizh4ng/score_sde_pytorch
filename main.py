@@ -16,7 +16,7 @@
 """Training and evaluation"""
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 5, 7'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1, 2, 3, 5, 7'
 import run_lib
 from absl import app
 from absl import flags
@@ -27,9 +27,11 @@ import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
+# config_flags.DEFINE_config_file(
+#   "config", 'configs/vp/ddpm/cifar10.py', "Training configuration.", lock_config=True)
 config_flags.DEFINE_config_file(
-  "config", 'configs/vp/ddpm/cifar10.py', "Training configuration.", lock_config=True)
-flags.DEFINE_string("workdir", 'vp_cifar10_ddpm', "Work directory.")
+  "config", 'configs/ddpmpp/cifar10_deep_continuous_vp_c8.py', "Training configuration.", lock_config=True)
+flags.DEFINE_string("workdir", 'vp_cifar10_ddpmpp_adaptive', "Work directory.")
 flags.DEFINE_enum("mode", 'eval', ["train", "eval", "fid_stats"], "Running mode: train or eval")
 flags.DEFINE_string("eval_folder", "eval",
                     "The folder name for storing evaluation results")

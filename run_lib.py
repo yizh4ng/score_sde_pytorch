@@ -341,10 +341,20 @@ def evaluate(config,
             eval_dir, f"ckpt_{ckpt}")
           tf.io.gfile.makedirs(this_sample_dir)
           samples, n = sampling_fn(score_model)
+
+          to_draw_sample = samples[:9]
+          nrow = int(np.sqrt(to_draw_sample.shape[0]))
+          image_grid = make_grid(to_draw_sample, nrow, padding=2)
+          with tf.io.gfile.GFile(
+                  os.path.join(this_sample_dir, "sample.png"), "wb") as fout:
+            save_image(image_grid, fout)
+
           samples = np.clip(samples.permute(0, 2, 3, 1).cpu().numpy() * 255., 0, 255).astype(np.uint8)
           samples = samples.reshape(
             (-1, config.data.image_size, config.data.image_size, config.data.num_channels))
           # Write samples to disk or Google Cloud Storage
+
+
           with tf.io.gfile.GFile(
               os.path.join(this_sample_dir, f"samples_{r}.npz"), "wb") as fout:
             io_buffer = io.BytesIO()
@@ -455,7 +465,7 @@ def fid_stats(config,
     # batch_ = (batch_['image']*255).astype(np.uint8).reshape((-1, config.data.image_size, config.data.image_size, 3))
 
     # batch_ = batch['image']._numpy()
-    batch_ = (batch['image']._numpy()).astype(np.uint8).reshape((-1, config.data.image_size, config.data.image_size, 3))
+    batch_ = (batch['image']._numpy()*255).astype(np.uint8).reshape((-1, config.data.image_size, config.data.image_size, 3))
     # print(batch_.shape)
     # Force garbage collection before calling TensorFlow code for Inception network
     gc.collect()

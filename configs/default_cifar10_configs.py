@@ -26,14 +26,27 @@ def get_default_configs():
   sampling.probability_flow = False
   sampling.snr = 0.16
 
+  # New parameters for the Adaptive step size EM algorithm
+  sampling.adaptive = False
+  sampling.h_init=1e-2
+  # sampling.abstol = 1e-2
+  sampling.abstol = 0.0078
+  sampling.reltol = 1e-2
+  sampling.error_use_prev=True
+  sampling.norm = "L2_scaled"
+  sampling.safety = 0.9
+  sampling.extrapolation = True
+  sampling.sde_improved_euler = True
+  sampling.exp = 0.9
+
   # evaluation
   config.eval = evaluate = ml_collections.ConfigDict()
-  evaluate.begin_ckpt = 14
-  evaluate.end_ckpt = 14
-  evaluate.batch_size = 10000
+  evaluate.begin_ckpt = 8
+  evaluate.end_ckpt = 8
+  evaluate.batch_size = 3000
   evaluate.enable_sampling = True
   evaluate.sampling = True
-  evaluate.num_samples = 50000
+  evaluate.num_samples = 10000
   evaluate.enable_loss = False
   evaluate.enable_bpd = False
   evaluate.bpd_dataset = 'test'
@@ -68,6 +81,6 @@ def get_default_configs():
   optim.grad_clip = 1.
 
   config.seed = 42
-  config.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+  config.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
   return config
