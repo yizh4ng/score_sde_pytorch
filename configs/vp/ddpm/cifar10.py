@@ -32,8 +32,18 @@ def get_config():
   sampling = config.sampling
   sampling.method = 'pc'
   # sampling.predictor = 'ancestral_sampling'
-  sampling.predictor = 'adaptive'
+  sampling.predictor = 'ddim'
+  config.model.num_scales = 151
+  # sampling.predictor = 'euler_maruyama'
+  # sampling.predictor = 'adaptive'
   sampling.corrector = 'none'
+
+  # config.sampling.method='euler_maruyama' #, choices=['euler_maruyama','adaptive']
+  config.sampling.sampling_h_init=1e-2
+  config.sampling.sampling_reltol=1e-2
+  config.sampling.sampling_abstol=0.0078
+  config.sampling.sampling_safety=0.9
+  config.sampling.sampling_exp=0.9
 
   # data
   data = config.data

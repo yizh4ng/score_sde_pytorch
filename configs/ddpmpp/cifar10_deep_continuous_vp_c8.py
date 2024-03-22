@@ -31,7 +31,10 @@ def get_config():
   # sampling
   sampling = config.sampling
   sampling.method = 'pc'
-  sampling.predictor = 'euler_maruyama'
+  # sampling.predictor = 'euler_maruyama'
+  # sampling.predictor = 'adaptive'
+  sampling.predictor = 'ddim'
+  config.model.num_scales = 274
   sampling.corrector = 'none'
 
   # data
@@ -67,9 +70,9 @@ def get_config():
   evaluate = config.eval
   evaluate.begin_ckpt = 8
   evaluate.end_ckpt = 8
-  evaluate.num_samples = 10000
+  evaluate.num_samples = 50000
   evaluate.enable_loss = False
-  evaluate.batch_size = 8
+  evaluate.batch_size = 9
   evaluate.enable_sampling = True
   
   return config

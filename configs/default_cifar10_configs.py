@@ -22,7 +22,7 @@ def get_default_configs():
   # sampling
   config.sampling = sampling = ml_collections.ConfigDict()
   sampling.n_steps_each = 1
-  sampling.noise_removal = False
+  sampling.noise_removal = True
   # sampling.noise_removal = False
   sampling.probability_flow = False
   sampling.snr = 0.16
@@ -30,7 +30,6 @@ def get_default_configs():
   # New parameters for the Adaptive step size EM algorithm
   sampling.adaptive = False
   sampling.h_init=1e-2
-  # sampling.abstol = 1e-2
   sampling.abstol = 0.0078
   sampling.reltol = 1e-2
   sampling.error_use_prev=True
@@ -39,15 +38,20 @@ def get_default_configs():
   sampling.extrapolation = True
   sampling.sde_improved_euler = True
   sampling.exp = 0.9
+  config.sampling.sampling_h_init=1e-2
+  config.sampling.sampling_reltol=1e-2
+  config.sampling.sampling_abstol=0.0078
+  config.sampling.sampling_safety=0.9
+  config.sampling.sampling_exp=0.9
 
   # evaluation
   config.eval = evaluate = ml_collections.ConfigDict()
   evaluate.begin_ckpt = 8
   evaluate.end_ckpt = 8
-  evaluate.batch_size = 8
+  evaluate.batch_size = 24
   evaluate.enable_sampling = True
   evaluate.sampling = True
-  evaluate.num_samples = 10000
+  evaluate.num_samples = 50000
   evaluate.enable_loss = False
   evaluate.enable_bpd = False
   evaluate.bpd_dataset = 'test'
@@ -65,8 +69,7 @@ def get_default_configs():
   config.model = model = ml_collections.ConfigDict()
   model.sigma_min = 0.01
   model.sigma_max = 50
-  # model.num_scales = 1000
-  model.num_scales = 10
+  model.num_scales = 1000
   model.beta_min = 0.1
   model.beta_max = 20.
   model.dropout = 0.1

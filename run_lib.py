@@ -254,6 +254,7 @@ def evaluate(config,
     sampling_shape = (config.eval.batch_size,
                       config.data.num_channels,
                       config.data.image_size, config.data.image_size)
+    # sampling_fn = sampling.get_sampling_fn(config, sde, sampling_shape, sampling_eps, config.device)
     sampling_fn = sampling.get_sampling_fn(config, sde, sampling_shape, inverse_scaler, sampling_eps)
 
   # Use inceptionV3 for images with resolution higher than 256.
@@ -342,7 +343,7 @@ def evaluate(config,
           tf.io.gfile.makedirs(this_sample_dir)
           samples, n = sampling_fn(score_model)
 
-          to_draw_sample = samples[:1]
+          to_draw_sample = samples[:9]
           nrow = int(np.sqrt(to_draw_sample.shape[0]))
           image_grid = make_grid(to_draw_sample, nrow, padding=2)
           with tf.io.gfile.GFile(
