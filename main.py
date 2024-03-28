@@ -17,7 +17,7 @@
 
 import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '4'
-os.environ['CUDA_VISIBLE_DEVICES'] = '4, 5, 6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3, 4, 6'
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import run_lib
 from absl import app
