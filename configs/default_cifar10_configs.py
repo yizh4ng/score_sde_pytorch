@@ -50,8 +50,8 @@ def get_default_configs():
   evaluate.end_ckpt = 8
   evaluate.batch_size = 24
   evaluate.enable_sampling = True
-  # evaluate.sampling = True
-  evaluate.sampling = False
+  evaluate.sampling = True
+  # evaluate.sampling = False
   evaluate.num_samples = 50000
   evaluate.enable_loss = False
   evaluate.enable_bpd = False

@@ -433,24 +433,26 @@ class RTK(Predictor):
             return x, x_mean
 
         # set 10 step langevin iteration
-        for _ in range(10):
+        for _ in range(1):
             # Calculate Score Components
             score = self.score_fn(x, t - h.squeeze())
             # score = self.score_fn(x, t)
-            term_1 = -(-2 * current_x * torch.exp(-_h)) / (2 * (1 - torch.exp(-2 * _h)))
-            term_2 = -(2 * x * torch.exp(-2 * _h)) / (2 * (1 - torch.exp(-2 * _h)))
+            # term_1 = -(-2 * current_x * torch.exp(-_h)) / (2 * (1 - torch.exp(-2 * _h)))
+            # term_2 = -(2 * x * torch.exp(-2 * _h)) / (2 * (1 - torch.exp(-2 * _h)))
+            term = (torch.exp(_h) * current_x - x) / (torch.exp(2 * _h) - 1)
 
             # Calculate Score
-            grad = score + term_1 + term_2
+            # grad = score + term_1 + term_2
+            grad = score + term
             # grad = score
             noise = torch.randn_like(x)
 
             # Determine step size (codes from langevin corrector for score sde)
-            # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
-            # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
-            # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
-            step_size = torch.Tensor((4e-05, ) * x.shape[0]).to(x.device)
-            # print(step_size)
+            grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
+            noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
+            step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
+            # step_size = torch.Tensor((5e-05, ) * x.shape[0]).to(x.device)
+            # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)
             x_mean = x + step_size[:, None, None, None] * grad
