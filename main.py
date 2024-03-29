@@ -16,9 +16,10 @@
 """Training and evaluation"""
 
 import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '4'
-os.environ['CUDA_VISIBLE_DEVICES'] = '3, 4, 6'
-# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2, 3, 4'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
 import run_lib
 from absl import app
 from absl import flags
@@ -37,7 +38,6 @@ config_flags.DEFINE_config_file(
   "config", 'configs/ddpmpp/cifar10_continuous_vp_c8.py', "Training configuration.", lock_config=True)
 # flags.DEFINE_string("workdir", 'ddpmpp_vp_continuous_ddim', "Work directory.")
 # flags.DEFINE_string("workdir", 'ddpm_vp_adaptive', "Work directory.")
-# flags.DEFINE_string("workdir", 'test', "Work directory.")
 # flags.DEFINE_string("workdir", 'test', "Work directory.")
 flags.DEFINE_string("workdir", 'ddpmpp_vp_alg1_euler', "Work directory.")
 flags.DEFINE_enum("mode", 'eval', ["train", "eval", "fid_stats"], "Running mode: train or eval")
