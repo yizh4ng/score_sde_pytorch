@@ -417,10 +417,10 @@ class RTK(Predictor):
         _h = torch.Tensor([h]).to(x.device)[:, None, None, None]
 
         # one step euler as the initial state for langevin iteration
-        z = torch.randn_like(x)
-        drift, diffusion = self.rsde.sde(x, t)
-        x_mean = x - drift * h
-        x = x_mean + diffusion[:, None, None, None] * np.sqrt(h) * z
+        # z = torch.randn_like(x)
+        # drift, diffusion = self.rsde.sde(x, t)
+        # x_mean = x - drift * h
+        # x = x_mean + diffusion[:, None, None, None] * np.sqrt(h) * z
 
         # one step ddpm as the initial state for langevin iteration
         # if isinstance(self.sde, sde_lib.VESDE):
@@ -428,12 +428,28 @@ class RTK(Predictor):
         # elif isinstance(self.sde, sde_lib.VPSDE):
         #     x, x_mean = self.vpsde_update_fn(x, t)
 
+        # one step ddim as initial state for langevin iteration
+        sde = self.sde
+        timestep = (t * (sde.N - 1) / sde.T).int().to(x.device)
+        timestep_next = ((t - h) * (sde.N - 1) / sde.T).int().to(x.device)  # same exact thing as  timestep - 1
+        # print(timestep, timestep_next)
+        alpha_t = sde.alphas_cumprod.to(x.device)[timestep][:, None, None, None]
+        alpha_prev = sde.alphas_cumprod.to(x.device)[timestep_next][:, None, None, None]
+
+        predicted_noise = -self.score_fn(x, t) * torch.sqrt(1 - alpha_t)
+        x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
+        # c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+        c1 = 0
+        c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
+        x = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise
+        x_mean = x
+
         # avoid final redundant denoising step.
         if (t - h.squeeze())[0].cpu().numpy() < 1e-8:
             return x, x_mean
 
         # set 10 step langevin iteration
-        for _ in range(1):
+        for _ in range(5):
             # Calculate Score Components
             score = self.score_fn(x, t - h.squeeze())
             # score = self.score_fn(x, t)
@@ -448,10 +464,108 @@ class RTK(Predictor):
             noise = torch.randn_like(x)
 
             # Determine step size (codes from langevin corrector for score sde)
-            grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
-            noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
-            step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
-            # step_size = torch.Tensor((5e-05, ) * x.shape[0]).to(x.device)
+            # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
+            # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
+            # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
+            step_size = torch.Tensor((5e-06, ) * x.shape[0]).to(x.device)
+            # print(step_size[0])
+
+            # update x (codes from langevin corrector for score sde)
+            x_mean = x + step_size[:, None, None, None] * grad
+            x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise
+
+        return x, x_mean
+
+
+@register_predictor(name='rtk1')
+class RTK1(Predictor):
+    """The ancestral sampling predictor. Currently only supports VE/VP SDEs."""
+
+    def __init__(self, sde, score_fn, probability_flow=False, shape=None, eps=1e-3,
+                 abstol=1e-2, reltol=1e-2, safety=.9, exp=0.9):
+        super().__init__(sde, score_fn, probability_flow)
+        if not isinstance(sde, sde_lib.VPSDE) and not isinstance(sde, sde_lib.VESDE):
+            raise NotImplementedError(f"SDE class {sde.__class__.__name__} not yet supported.")
+        assert not probability_flow, "Probability flow not supported by ancestral sampling"
+
+    def vesde_update_fn(self, x, t):
+        sde = self.sde
+        timestep = (t * (sde.N - 1) / sde.T).long()
+        sigma = sde.discrete_sigmas[timestep]
+        adjacent_sigma = torch.where(timestep == 0, torch.zeros_like(t), sde.discrete_sigmas.to(t.device)[timestep - 1])
+        score = self.score_fn(x, t)
+        x_mean = x + score * (sigma ** 2 - adjacent_sigma ** 2)[:, None, None, None]
+        std = torch.sqrt((adjacent_sigma ** 2 * (sigma ** 2 - adjacent_sigma ** 2)) / (sigma ** 2))
+        noise = torch.randn_like(x)
+        x = x_mean + std[:, None, None, None] * noise
+        return x, x_mean
+
+    def vpsde_update_fn(self, x, t):
+        sde = self.sde
+        timestep = (t * (sde.N - 1) / sde.T).long()
+        beta = sde.discrete_betas.to(t.device)[timestep]
+        score = self.score_fn(x, t)
+        x_mean = (x + beta[:, None, None, None] * score) / torch.sqrt(1. - beta)[:, None, None, None]
+        noise = torch.randn_like(x)
+        x = x_mean + torch.sqrt(beta)[:, None, None, None] * noise
+        return x, x_mean
+
+    def update_fn(self, x, t, h, x_prev=None):
+        # record current x (x_t)
+        current_x = x
+
+        sde = self.sde
+        timestep = (t * (sde.N - 1) / sde.T).long()
+        alpha = sde.alphas.to(t.device)[timestep] # obtain current alpha. e.g., 0.98
+        # h is the step size with a scale from 0 to 1
+        _h = torch.Tensor([h]).to(x.device)[:, None, None, None]
+
+
+        # one step ddim as initial state for langevin iteration
+        sde = self.sde
+        timestep = (t * (sde.N - 1) / sde.T).int().to(x.device)
+        timestep_next = ((t - h) * (sde.N - 1) / sde.T).int().to(x.device)  # same exact thing as  timestep - 1
+        # print(timestep, timestep_next)
+        alpha_t = sde.alphas_cumprod.to(x.device)[timestep][:, None, None, None]
+        alpha_prev = sde.alphas_cumprod.to(x.device)[timestep_next][:, None, None, None]
+
+        predicted_noise = -self.score_fn(x, t) * torch.sqrt(1 - alpha_t)
+        x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
+        # c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+        c1 = 0
+        c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
+        x = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise
+        x_mean = x
+
+        # avoid final redundant denoising step.
+        if (t - h.squeeze())[0].cpu().numpy() < 1e-8:
+            return x, x_mean
+
+        # integrate to timestep
+        beta = torch.linspace(sde.beta_0 / 1000, sde.beta_1 / 1000, 1000).to(t.device)
+        s = torch.linspace(0, 1, 1000).to(t.device)
+        exp = torch.exp(2 * (s - t[0]))
+        weight = 4 * torch.sum((beta * exp)[int(t[0] * 999)], dim=0)
+
+        # set 10 step langevin iteration
+        for _ in range(5):
+            # Calculate Score Components
+            score = self.score_fn(x, t - h.squeeze())
+
+
+            # score = self.score_fn(x, t)
+            term_1 = -(-2 * current_x * torch.exp(-_h)) / weight
+            term_2 = -(2 * x * torch.exp(-2 * _h)) / weight
+
+            # Calculate Score
+            grad = score + term_1 + term_2
+            noise = torch.randn_like(x)
+
+            # Determine step size (codes from langevin corrector for score sde)
+            # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
+            # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
+            # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
+            step_size = torch.Tensor((5e-06, ) * x.shape[0]).to(x.device)
             # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)

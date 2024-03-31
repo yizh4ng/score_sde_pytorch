@@ -31,7 +31,7 @@ def get_config():
   sampling = config.sampling
   sampling.method = 'pc'
   # sampling.predictor = 'euler_maruyama'
-  sampling.predictor = 'rtk'
+  sampling.predictor = 'rtk1'
   # sampling.predictor = 'ddim'
   config.model.num_scales = 274
   # sampling.predictor = 'ancestral_sampling'
