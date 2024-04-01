@@ -532,20 +532,24 @@ class RTK1(Predictor):
         predicted_noise = -self.score_fn(x, t) * torch.sqrt(1 - alpha_t)
         x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
         # c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
-        c1 = 0
+        c1 = 0 # set eta to zero
         c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
         x = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise
-        x_mean = x
+        x_mean = x # x_mean should be x0_t, but in my test, x_mean = x is better
 
         # avoid final redundant denoising step.
         if (t - h.squeeze())[0].cpu().numpy() < 1e-8:
             return x, x_mean
 
-        # integrate to timestep
-        beta = torch.linspace(sde.beta_0 / 1000, sde.beta_1 / 1000, 1000).to(t.device)
-        s = torch.linspace(0, 1, 1000).to(t.device)
+        # By Riemann integral to calculator the divider
+        beta = torch.linspace(sde.beta_0 / 1000, sde.beta_1 / 1000, 10000).to(t.device)
+        s = torch.linspace(0, 1, 10000).to(t.device)
         exp = torch.exp(2 * (s - t[0]))
-        weight = 4 * torch.sum((beta * exp)[int(t[0] * 999)], dim=0)
+        weight = 4 * torch.sum((beta * exp)[int((t - h)[0] * 9999):int(t[0] * 9999)], dim=0) * 0.0001
+
+        # By Approximation to calculator the divider
+        beta = sde.discrete_betas.to(t.device)[timestep]
+        weight = 4 * beta[0] * h # 0.0011 -> 2e-05
 
         # set 10 step langevin iteration
         for _ in range(5):
@@ -565,7 +569,7 @@ class RTK1(Predictor):
             # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
             # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
             # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
-            step_size = torch.Tensor((5e-06, ) * x.shape[0]).to(x.device)
+            step_size = torch.Tensor((5e-8, ) * x.shape[0]).to(x.device)
             # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)
