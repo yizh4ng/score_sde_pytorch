@@ -569,7 +569,7 @@ class RTK1(Predictor):
             # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
             # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
             # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
-            step_size = torch.Tensor((5e-8, ) * x.shape[0]).to(x.device)
+            step_size = torch.Tensor((5e-9, ) * x.shape[0]).to(x.device)
             # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)
