@@ -542,17 +542,17 @@ class RTK1(Predictor):
             return x, x_mean
 
         # By Riemann integral to calculator the divider
-        beta = torch.linspace(sde.beta_0 / 1000, sde.beta_1 / 1000, 10000).to(t.device)
-        s = torch.linspace(0, 1, 10000).to(t.device)
-        exp = torch.exp(2 * (s - t[0]))
-        weight = 4 * torch.sum((beta * exp)[int((t - h)[0] * 9999):int(t[0] * 9999)], dim=0) * 0.0001
+        # beta = torch.linspace(sde.beta_0 / 1000, sde.beta_1 / 1000, 10000).to(t.device)
+        # s = torch.linspace(0, 1, 10000).to(t.device)
+        # exp = torch.exp(2 * (s - t[0]))
+        # weight = 4 * torch.sum((beta * exp)[int((t - h)[0] * 9999):int(t[0] * 9999)], dim=0) * 0.0001
 
         # By Approximation to calculator the divider
         beta = sde.discrete_betas.to(t.device)[timestep]
         weight = 4 * beta[0] * h # 0.0011 -> 2e-05
 
         # set 10 step langevin iteration
-        for _ in range(5):
+        for _ in range(1):
             # Calculate Score Components
             score = self.score_fn(x, t - h.squeeze())
 
@@ -569,7 +569,8 @@ class RTK1(Predictor):
             # grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
             # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
             # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
-            step_size = torch.Tensor((5e-9, ) * x.shape[0]).to(x.device)
+            step_size = torch.Tensor((1e-8, ) * x.shape[0]).to(x.device)
+            # step_size = torch.Tensor((5e-9, ) * x.shape[0]).to(x.device)
             # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)
