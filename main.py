@@ -16,7 +16,8 @@
 """Training and evaluation"""
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2, 4, 5'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '3, 4, 5'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '3'

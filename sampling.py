@@ -552,7 +552,7 @@ class RTK1(Predictor):
         weight = 4 * beta[0] * h # 0.0011 -> 2e-05
 
         # set 10 step langevin iteration
-        for _ in range(10):
+        for _ in range(20):
             # Calculate Score Components
             score = self.score_fn(x, t - h.squeeze())
 
@@ -570,7 +570,8 @@ class RTK1(Predictor):
             # noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
             # step_size = (0.16 * noise_norm / grad_norm) ** 2 * 2 * alpha
             # step_size = torch.Tensor((1e-8, ) * x.shape[0]).to(x.device)
-            step_size = torch.Tensor((5e-9, ) * x.shape[0]).to(x.device)
+            step_size = torch.Tensor((5e-6, ) * x.shape[0]).to(x.device)
+            # step_size = torch.Tensor((5e-9, ) * x.shape[0]).to(x.device)
             # print(step_size[0])
 
             # update x (codes from langevin corrector for score sde)
