@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import os
 from tqdm import tqdm
@@ -29,6 +30,19 @@ def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
 def reverse_ode_step(x, t, step_size=1, beta=torch.tensor(0.01)):
     return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size
 
+def reverse_ddim_step(x, t, step_size=1, beta=torch.tensor(0.01)):
+    alpha = 1 - beta
+    alpha_cumprod = alpha ** t
+    alpha_cumrpod_prev = alpha ** (t - step_size)
+
+    predicted_noise = -grad_log_p(x, t) * torch.sqrt(1 -alpha_cumprod)
+    x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_cumprod)))) / torch.sqrt(alpha_cumprod)
+    # c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+    c1 = 0
+    c2 = torch.sqrt((1 - alpha_cumrpod_prev) - c1 ** 2)
+    x = torch.sqrt(alpha_cumrpod_prev) * x0_t + c2 * predicted_noise
+    return x
+
 def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     # record current x
     current_x = x
@@ -36,8 +50,9 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     # scale step size to 0 ~ 1
     h = torch.tensor(step_size / 1000).to('cuda')
 
-    # one step sde as initial state for langevin mcmc
+    # one step ddim as initial state for langevin mcmc
     x = reverse_sde_step(x, t, step_size, beta)
+    # x = reverse_ddim_step(x, t, step_size, beta)
     # x = reverse_ode_step(x, t, step_size, beta)
 
     # avoid final redundant mcmc step
@@ -53,8 +68,7 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
         term_2 = -(2 * x * torch.exp(-2 * h)) / weight
 
         # Calculate Score
-        # grad = score + term_1 + term_2
-        grad = score
+        grad = score + term_1 + term_2
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
@@ -64,52 +78,60 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     return x
 
 
+
 x = torch.randn(50000).to('cuda')
 
-step_size = 40
-pbar = tqdm(total=1000)
-for t in reversed(range(1000)):
-    if t % step_size != 0: continue
-    # x = reverse_ode_step(x, t, step_size=step_size)
-    x = reverse_sde_step(x, t, step_size=step_size)
-    # x = langevin_correction(x, t, step_size=step_size)
-    pbar.update(step_size)
+for step_size in [1]:
+    pbar = tqdm(total=1000)
+    for t in reversed(range(1, 1000)):
+        if t % step_size != 0: continue
+        # x = reverse_ode_step(x, t, step_size=step_size)
+        x = reverse_sde_step(x, t, step_size=step_size)
+        # x = reverse_ddim_step(x, t, step_size=step_size)
+        # x = langevin_correction(x, t, step_size=step_size)
+        pbar.update(step_size)
 
-# Visualize above calculated histogram as bar diagram
-hist = torch.histc(x, bins = 50, min = -5, max = 5).to('cpu')
-import matplotlib.pyplot as plt
-bins = range(50)
-plt.bar(bins, hist, align='center')
-plt.xlabel('Bins')
-plt.ylabel('Frequency')
-plt.show()
+    # Visualize above calculated histogram as bar diagram
+    hist = torch.histc(x, bins = 50, min = -5, max = 5).to('cpu')
+    import matplotlib.pyplot as plt
+    bins = range(50)
+    plt.bar(bins, hist, align='center')
+    plt.xlabel('Bins')
+    plt.ylabel('Frequency')
+    plt.show()
 
-y = torch.concat([(torch.randn(25000) - 0.5) * 0.3, (torch.randn(25000) + 0.5) * 0.3]).to('cuda')
+    y = torch.concat([torch.randn(25000) * 0.3 + 1, torch.randn(25000) * 0.3 - 1]).to('cuda')
+    hist = torch.histc(y, bins = 50, min = -5, max = 5).to('cpu')
+    import matplotlib.pyplot as plt
+    bins = range(50)
+    plt.bar(bins, hist, align='center')
+    plt.xlabel('Bins')
+    plt.ylabel('Frequency')
+    plt.show()
 
-def calculate_kl(x, y):
-    import torch
-    from torch.distributions import Categorical
-    from torch.distributions.kl import kl_divergence
-    num_classes = 50
-    def estimate_probs(data):
-        # 计算每个类别的频率
-        counts = torch.histc(data.float(), bins=num_classes, min=-5, max=5)
-        # 将频率转换为概率
-        probs = counts / counts.sum()
-        return probs
+    def calculate_kl(x, y):
+        import torch
+        from torch.distributions import Categorical
+        from torch.distributions.kl import kl_divergence
+        num_classes = 50
+        def estimate_probs(data):
+            # 计算每个类别的频率
+            counts = torch.histc(data.float(), bins=num_classes, min=-5, max=5)
+            # 将频率转换为概率
+            probs = counts / counts.sum() + 1e-8
+            return probs
 
-    # 假设你有两组离散的数据
+        # 假设你有两组离散的数据
 
-    # 估计概率分布
-    num_classes = 4  # 假设你知道有4个类别
-    probs1 = estimate_probs(x)
-    probs2 = estimate_probs(y)
+        # 估计概率分布
+        probs1 = estimate_probs(x)
+        probs2 = estimate_probs(y)
 
-    dist1 = Categorical(probs=probs1)
-    dist2 = Categorical(probs=probs2)
+        dist1 = Categorical(probs=probs1)
+        dist2 = Categorical(probs=probs2)
 
-    # 计算KL散度
-    kl = kl_divergence(dist1, dist2)
-    print(f"KL divergence from dist1 to dist2: {kl.item()}")
+        # 计算KL散度
+        kl = kl_divergence(dist1, dist2)
+        print(f"KL divergence from dist1 to dist2: {kl.item()}")
 
-calculate_kl(y, x)
+    calculate_kl(y, x)
