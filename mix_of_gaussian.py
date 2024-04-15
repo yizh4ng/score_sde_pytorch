@@ -78,17 +78,49 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     return x
 
 
+def langevin_correction_explicit(x, t, step_size=1, beta=torch.tensor(0.01)):
+    # record current x
+    current_x = x
+
+    # scale step size to 0 ~ 1
+    h = torch.tensor(step_size / 1000).to('cuda')
+
+    # one step ddim as initial state for langevin mcmc
+    # x = reverse_sde_step(x, t, step_size, beta)
+    x = reverse_ddim_step(x, t, step_size, beta)
+    # x = reverse_ode_step(x, t, step_size, beta)
+
+    # avoid final redundant mcmc step
+    if t - step_size < 1e-8:
+        return x
+
+    # set 10 step langevin iteration
+    for _ in range(100):
+        # Calculate Score Components
+        score = grad_log_p(x, t - step_size, beta=beta)
+        noise = torch.randn_like(x).to('cuda')
+
+        # update x (codes from langevin corrector for score sde)
+        inner_step_size = torch.tensor(5e-7)
+        a = 1/ ( beta * (torch.exp(2 * h) - 1))
+        term_1 = score * (torch.exp(a * inner_step_size)/a - 1/a)
+        term_2 = a * (torch.exp(a * inner_step_size)/a - 1/a) * current_x
+        term_3 = noise * torch.sqrt((torch.exp( 2 * a * inner_step_size) - 1) / a)
+        x =  (x + term_1 + term_2 + term_3) / torch.exp(a * inner_step_size)
+
+    return x
 
 x = torch.randn(50000).to('cuda')
 
-for step_size in [1]:
+for step_size in [10]:
     pbar = tqdm(total=1000)
     for t in reversed(range(1, 1000)):
         if t % step_size != 0: continue
         # x = reverse_ode_step(x, t, step_size=step_size)
-        x = reverse_sde_step(x, t, step_size=step_size)
+        # x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
         # x = langevin_correction(x, t, step_size=step_size)
+        x = langevin_correction_explicit(x, t, step_size=step_size)
         pbar.update(step_size)
 
     # Visualize above calculated histogram as bar diagram
