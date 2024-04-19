@@ -3,7 +3,7 @@ import torch
 import os
 from tqdm import tqdm
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 def grad_log_p(x_t, t,
                mu1=torch.tensor(1).to('cuda'),
@@ -23,6 +23,20 @@ def grad_log_p(x_t, t,
     grad_log_p /= sigma_t
 
     return grad_log_p
+
+def log_p(x_t, t,
+               mu1=torch.tensor(1).to('cuda'),
+               mu2=torch.tensor(-1).to('cuda'),
+               sigma=torch.tensor(0.3).to('cuda'),
+               beta=torch.tensor(0.01).to('cuda')):
+    mu1_t = mu1 * torch.exp(-0.5 * beta * t)
+    mu2_t = mu2 * torch.exp(-0.5 * beta * t)
+    sigma_t = sigma**2 * torch.exp(-beta * t) + 1 - torch.exp(-beta * t)
+
+    # 计算两个高斯成分的概率密度
+    p1 = torch.exp(-0.5 * (x_t - mu1_t)**2 / sigma_t) / torch.sqrt(2 * torch.pi * sigma_t)
+    p2 = torch.exp(-0.5 * (x_t - mu2_t)**2 / sigma_t) / torch.sqrt(2 * torch.pi * sigma_t)
+    return torch.log(0.5 * p1 + 0.5 * p2)
 
 def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
     return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size + torch.sqrt(beta * step_size) * torch.randn_like(x)
@@ -51,8 +65,8 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     h = torch.tensor(step_size / 1000).to('cuda')
 
     # one step ddim as initial state for langevin mcmc
-    x = reverse_sde_step(x, t, step_size, beta)
-    # x = reverse_ddim_step(x, t, step_size, beta)
+    # x = reverse_sde_step(x, t, step_size, beta)
+    x = reverse_ddim_step(x, t, step_size, beta)
     # x = reverse_ode_step(x, t, step_size, beta)
 
     # avoid final redundant mcmc step
@@ -60,7 +74,7 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
         return x
 
     # set 10 step langevin iteration
-    for _ in range(1000):
+    for _ in range(40):
         # Calculate Score Components
         weight = 4 * beta * h  # 0.0011 -> 2e-05
         score = grad_log_p(x, t - step_size, beta=beta)
@@ -72,11 +86,10 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
-        inner_step_size = torch.tensor(5e-4)
+        inner_step_size = torch.tensor(5e-5)
         x_mean = x + inner_step_size * grad
         x = x_mean + torch.sqrt(inner_step_size * 2) * noise
     return x
-
 
 def langevin_correction_explicit(x, t, step_size=1, beta=torch.tensor(0.01)):
     # record current x
@@ -99,12 +112,65 @@ def langevin_correction_explicit(x, t, step_size=1, beta=torch.tensor(0.01)):
         noise = torch.randn_like(x).to('cuda')
 
         # update x
-        inner_step_size = torch.tensor(5e-4)
+        inner_step_size = torch.tensor(5e-6)
         a = 1/ ( beta * (torch.exp(2 * h) - 1))
         term_1 = score * (torch.exp(a * inner_step_size)/a - 1/a)
         term_2 = torch.exp(h) * (torch.exp(a * inner_step_size) - 1) * current_x
         term_3 = noise * torch.sqrt((torch.exp(2 * a * inner_step_size) - 1) / a)
         x =  (x + term_1 + term_2 + term_3) / torch.exp(a * inner_step_size)
+    return x
+
+def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01)):
+    # record current x
+    current_x = x
+    # scale step size to 0 ~ 1
+    h = torch.tensor(step_size / 1000).to('cuda')
+    # one step ddim as initial state for langevin mcmc
+    x = reverse_ddim_step(x, t, step_size, beta)
+    # x = reverse_sde_step(x, t, step_size, beta)
+
+    # avoid final redundant mcmc step
+    if t - step_size < 1e-8:
+        return x
+
+    # langevin iteration
+    for _ in range(50):
+        # Calculate Score Components
+        weight = 4 * beta * h  # 0.0011 -> 2e-05
+        def get_grad(x, t):
+            score = grad_log_p(x, t - step_size, beta=beta)
+            term_1 = -(-2 * current_x * torch.exp(-h)) / weight
+            term_2 = -(2 * x * torch.exp(-2 * h)) / weight
+            return score + term_1 + term_2
+
+
+        # Calculate Score
+        grad = get_grad(x, t - step_size)
+        noise = torch.randn_like(x).to('cuda')
+
+        # update x (codes from langevin corrector for score sde)
+        inner_step_size = torch.tensor(5e-5)
+        x_mean = x + inner_step_size * grad
+        x_new = x_mean + torch.sqrt(inner_step_size * 2) * noise
+
+        # now decide whether to accept this x_new
+        term_1 = (torch.exp(
+            -log_p(x_new, t - step_size, beta=beta)
+            - torch.square(current_x - x_new - inner_step_size * grad_log_p(x_new, t - step_size, beta=beta))/ (4 * inner_step_size)))
+        term_2 = (torch.exp(
+            -log_p(current_x, t - step_size, beta=beta)
+            - torch.square(x_new - current_x - inner_step_size * grad_log_p(current_x, t - step_size, beta=beta))/ (4 * inner_step_size)))
+        term_1_over_term_2 = term_1 / term_2
+        alpha = torch.minimum(torch.ones_like(term_1_over_term_2), term_1_over_term_2)
+        uniform_sample = torch.empty(term_1_over_term_2.shape).uniform_(0,1).to(alpha.device)
+        update_true = uniform_sample < alpha
+
+        # print accept rate ~80%
+        num_false = (update_true.to(torch.int)).sum() / x.shape[0]
+        print(num_false)
+
+        x[update_true] = x_new[update_true]
+
     return x
 
 x = torch.randn(50000).to('cuda')
@@ -116,8 +182,9 @@ for step_size in [40]:
         # x = reverse_ode_step(x, t, step_size=step_size)
         # x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
-        # x = langevin_correction(x, t, step_size=step_size)
-        x = langevin_correction_explicit(x, t, step_size=step_size)
+        # x = langevin_correction_explicit(x, t, step_size=step_size)
+        x = langevin_correction(x, t, step_size=step_size)
+        # x = langevin_correction_with_rejection(x, t, step_size=step_size)
         pbar.update(step_size)
 
     # Visualize above calculated histogram as bar diagram
