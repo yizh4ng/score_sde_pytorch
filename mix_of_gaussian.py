@@ -134,14 +134,19 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
         return x
 
     # langevin iteration
-    for _ in range(50):
+    for _ in range(2000):
         # Calculate Score Components
         weight = 4 * beta * h  # 0.0011 -> 2e-05
         def get_grad(x, t):
-            score = grad_log_p(x, t - step_size, beta=beta)
+            score = grad_log_p(x, t, beta=beta)
             term_1 = -(-2 * current_x * torch.exp(-h)) / weight
             term_2 = -(2 * x * torch.exp(-2 * h)) / weight
-            return score + term_1 + term_2
+            return -score - term_1 - term_2
+
+        def get_energy(x, t):
+            energy = - log_p(x, t, beta=beta)
+            term_2 = -torch.square(current_x - x * torch.exp(-h)) / (2 * (1 - torch.exp(-2 * h)))
+            return energy + term_2
 
 
         # Calculate Score
@@ -149,25 +154,26 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
-        inner_step_size = torch.tensor(5e-5)
-        x_mean = x + inner_step_size * grad
+        inner_step_size = torch.tensor(5e-9)
+        x_mean = x - inner_step_size * grad
         x_new = x_mean + torch.sqrt(inner_step_size * 2) * noise
 
         # now decide whether to accept this x_new
         term_1 = (torch.exp(
-            -log_p(x_new, t - step_size, beta=beta)
-            - torch.square(current_x - x_new - inner_step_size * grad_log_p(x_new, t - step_size, beta=beta))/ (4 * inner_step_size)))
+            -get_energy(x_new, t - step_size)
+            - torch.square(current_x - x_new + inner_step_size * get_grad(x_new, t - step_size))/ (4 * inner_step_size))) + 1e-8
         term_2 = (torch.exp(
-            -log_p(current_x, t - step_size, beta=beta)
-            - torch.square(x_new - current_x - inner_step_size * grad_log_p(current_x, t - step_size, beta=beta))/ (4 * inner_step_size)))
+            -get_energy(current_x, t - step_size)
+            - torch.square(x_new - current_x + inner_step_size * get_grad(current_x, t - step_size))/ (4 * inner_step_size))) + 1e-8
         term_1_over_term_2 = term_1 / term_2
         alpha = torch.minimum(torch.ones_like(term_1_over_term_2), term_1_over_term_2)
         uniform_sample = torch.empty(term_1_over_term_2.shape).uniform_(0,1).to(alpha.device)
         update_true = uniform_sample < alpha
 
         # print accept rate ~80%
-        num_false = (update_true.to(torch.int)).sum() / x.shape[0]
-        print(num_false)
+        # num_false = (update_true.to(torch.int)).sum() / x.shape[0]
+        # print(update_true.to(torch.int).sum())
+        # print(torch.min(term_1_over_term_2))
 
         x[update_true] = x_new[update_true]
 
@@ -175,7 +181,7 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
 
 x = torch.randn(50000).to('cuda')
 
-for step_size in [40]:
+for step_size in [10]:
     pbar = tqdm(total=1000)
     for t in reversed(range(1, 1000)):
         if t % step_size != 0: continue
@@ -183,8 +189,8 @@ for step_size in [40]:
         # x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
         # x = langevin_correction_explicit(x, t, step_size=step_size)
-        x = langevin_correction(x, t, step_size=step_size)
-        # x = langevin_correction_with_rejection(x, t, step_size=step_size)
+        # x = langevin_correction(x, t, step_size=step_size)
+        x = langevin_correction_with_rejection(x, t, step_size=step_size)
         pbar.update(step_size)
 
     # Visualize above calculated histogram as bar diagram
