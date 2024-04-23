@@ -19,7 +19,7 @@ def grad_log_p(x_t, t,
     p2 = torch.exp(-0.5 * (x_t - mu2_t)**2 / sigma_t) / torch.sqrt(2 * torch.pi * sigma_t)
 
     # 计算梯度对数似然
-    grad_log_p = (-(x_t - mu1_t) * p1 - (x_t - mu2_t) * p2) / (p1 + p2)
+    grad_log_p = (-(x_t - mu1_t) * p1 - (x_t - mu2_t) * p2) / (p1 + p2 + 1e-12)
     grad_log_p /= sigma_t
 
     return grad_log_p
@@ -70,11 +70,11 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     # x = reverse_ode_step(x, t, step_size, beta)
 
     # avoid final redundant mcmc step
-    if t - step_size < 1e-8:
-        return x
+    # if t - step_size < 1e-8:
+    #     return x
 
     # set 10 step langevin iteration
-    for _ in range(500):
+    for _ in range(10):
         # Calculate Score Components
         weight = 4 * beta * h  # 0.0011 -> 2e-05
         score = grad_log_p(x, t - step_size, beta=beta)
@@ -83,10 +83,14 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
 
         # Calculate Score
         grad = score + term_1 + term_2
+        # grad = score
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
-        inner_step_size = torch.tensor(5e-4)
+        if step_size == 1:
+            inner_step_size = torch.tensor(weight / 1000)
+        else:
+            inner_step_size = torch.tensor(weight / 100)
         x_mean = x + inner_step_size * grad
         x = x_mean + torch.sqrt(inner_step_size * 2) * noise
     return x
@@ -130,11 +134,11 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
     # x = reverse_sde_step(x, t, step_size, beta)
 
     # avoid final redundant mcmc step
-    if t - step_size < 1e-8:
-        return x
+    # if t - step_size < 1e-8:
+    #     return x
 
     # langevin iteration
-    for _ in range(500):
+    for _ in range(10):
         # Calculate Score Components
         weight = 4 * beta * h
         def get_grad(x, t):
@@ -142,19 +146,24 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
             term_1 = (-2 * current_x * torch.exp(-h)) / weight
             term_2 = (2 * x * torch.exp(-2 * h)) / weight
             return score + term_1 + term_2
+            # return score
 
         def get_energy(x, t):
             energy = -log_p(x, t, beta=beta)
-            # term_2 = torch.square(current_x - x * torch.exp(-h)) / (2 * (1 - torch.exp(-2 * h)))
             term_2 = torch.square(current_x - x * torch.exp(-h)) / weight
             return energy + term_2
+            # return energy
 
         # Calculate Score
         grad = get_grad(x, t - step_size)
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
-        inner_step_size = torch.tensor(5e-4)
+        # inner_step_size = torch.tensor(1e-6)
+        if step_size == 1:
+            inner_step_size = torch.tensor(weight / 1000)
+        else:
+            inner_step_size = torch.tensor(weight / 100)
         x_mean = x - inner_step_size * grad
         x_new = x_mean + torch.sqrt(inner_step_size * 2) * noise
 
@@ -166,35 +175,39 @@ def langevin_correction_with_rejection(x, t, step_size=1, beta=torch.tensor(0.01
         #     -get_energy(x, t - step_size)
         #     - torch.square(x_new - x + inner_step_size * get_grad(x, t - step_size))/ (4 * inner_step_size))) + 1e-12
         # term_1_over_term_2 = term_1 / term_2
-        term_1_over_term_2 = torch.exp(
-            - get_energy(x_new, t - step_size)
-            + torch.square(x - x_new + inner_step_size * get_grad(x_new, t - step_size))/ (4 * inner_step_size)
-            + get_energy(x, t - step_size)
-            - torch.square(x_new - x + inner_step_size * get_grad(x, t - step_size))/ (4 * inner_step_size))
-
-        alpha = torch.minimum(torch.ones_like(term_1_over_term_2), term_1_over_term_2)
-        uniform_sample = torch.empty(term_1_over_term_2.shape).uniform_(0,1).to(alpha.device)
-        update_true = uniform_sample < alpha
+        # term_1_over_term_2 = torch.exp(
+        #     - get_energy(x_new, t - step_size)
+        #     + torch.square(x - x_new + inner_step_size * get_grad(x_new, t - step_size))/ (4 * inner_step_size)
+        #     + get_energy(x, t - step_size)
+        #     - torch.square(x_new - x + inner_step_size * get_grad(x, t - step_size))/ (4 * inner_step_size))
+        #
+        # alpha = torch.minimum(torch.ones_like(term_1_over_term_2), term_1_over_term_2)
+        # uniform_sample = torch.empty(term_1_over_term_2.shape).uniform_(0,1).to(alpha.device)
+        # update_true = uniform_sample < alpha
 
         # print accept rate ~80%
         # accept_rate = (update_true.to(torch.int)).sum() / x.shape[0]
         # print(accept_rate)
 
-        x[update_true] = x_new[update_true]
+        # x[update_true] = x_new[update_true]
+
+        accept_ratio = torch.exp(-get_energy(x_new,t-step_size) + get_energy(x, t-step_size) - 0.5 * ((x_new - x + inner_step_size * get_grad(x, t-step_size)) ** 2) / (2 * inner_step_size) + 0.5 * ((x - x_new + inner_step_size * get_grad(x_new, t-step_size)) ** 2) / (2 * inner_step_size))
+        accept = torch.rand_like(x).to('cuda') < accept_ratio
+        x = torch.where(accept, x_new, x)
 
     return x
 
 x = torch.randn(50000).to('cuda')
 
-for step_size in [100]:
+for step_size in [1, 10, 20, 40, 100]:
     pbar = tqdm(total=1000)
     for t in reversed(range(1, 1000)):
         if t % step_size != 0: continue
         # x = reverse_ode_step(x, t, step_size=step_size)
-        # x = reverse_sde_step(x, t, step_size=step_size)
+        x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
         # x = langevin_correction_explicit(x, t, step_size=step_size)
-        x = langevin_correction(x, t, step_size=step_size)
+        # x = langevin_correction(x, t, step_size=step_size)
         # x = langevin_correction_with_rejection(x, t, step_size=step_size)
         pbar.update(step_size)
     pbar.close()
@@ -207,6 +220,7 @@ for step_size in [100]:
     plt.xlabel('Bins')
     plt.ylabel('Frequency')
     plt.show()
+    plt.savefig(f'./test/{step_size}_sde.png')
 
     y = torch.concat([torch.randn(25000) * 0.3 + 1, torch.randn(25000) * 0.3 - 1]).to('cuda')
     hist = torch.histc(y, bins = 50, min = -5, max = 5).to('cpu')
