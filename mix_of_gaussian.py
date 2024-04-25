@@ -142,11 +142,11 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01)):
     #     return x
 
     # set 10 step langevin iteration
-    for _ in range(100):
+    for _ in range(20):
         # Calculate Score Components
         # weight = 4 * beta * h  # 0.0011 -> 2e-05
-        weight = 2 *  (1-torch.exp(-2 * h))  # 0.0011 -> 2e-05
-        # weight = torch.tensor(1).to('cuda')
+        weight = 2 * (1 - torch.exp(-2 * h)) / (torch.tensor(step_size).to(
+            'cuda') / 1000) ** 0.5  # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
         score = grad_log_p(x, t - step_size, beta=beta)
         term_1 = -(-2 * current_x * torch.exp(-h)) / weight
         term_2 = -(2 * x * torch.exp(-2 * h)) / weight
@@ -179,7 +179,7 @@ def langevin_correction_explicit(x, t, step_size=1, beta=torch.tensor(0.01)):
         return x
 
     # set 10 step langevin iteration
-    for _ in range(100):
+    for _ in range(20):
         # Calculate Score Components
         score = grad_log_p(x, t - step_size, beta=beta)
         noise = torch.randn_like(x).to('cuda')
@@ -206,13 +206,13 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
     #     return x
 
     # langevin iteration
-    for _ in range(100):
+    for _ in range(20):
         # Calculate Score Components
         # weight = 4 * beta * h
         # weight = torch.tensor(1).to('cuda')
         # weight = 2 * h
-        weight = 2 *  (1-torch.exp(-2 * h))  # 0.0011 -> 2e-05
-
+        # weight = 2 *  (1-torch.exp(-2 * h))  # 0.0011 -> 2e-05
+        weight = 2 * (1 - torch.exp(-2 * h)) / (torch.tensor(step_size).to('cuda') / 1000) ** 0.7  # 0.0011 -> 2e-05
         def get_grad(x, t):
             score = -grad_log_p(x, t, beta=beta)
             term_1 = (-2 * current_x * torch.exp(-h)) / weight
@@ -247,7 +247,7 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
     return x
 
 
-for step_size in [1, 20, 40, 100, 200]:
+for step_size in [20, 40, 100, 200, 500, 1000]:
 # for step_size in [1,2, 5, 10]:
     x = torch.randn(50000).to('cuda')
     pbar = tqdm(total=1000)
@@ -256,10 +256,10 @@ for step_size in [1, 20, 40, 100, 200]:
         # x = reverse_ode_step(x, t, step_size=step_size)
         # x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
-        x = reverse_ddpm_step(x, t, step_size=step_size)
+        # x = reverse_ddpm_step(x, t, step_size=step_size)
         # x = langevin_correction_explicit(x, t, step_size=step_size)
         # x = langevin_correction_alg1(x, t, step_size=step_size)
-        # x = langevin_correction_with_rejection_alg1(x, t, step_size=step_size)
+        x = langevin_correction_with_rejection_alg1(x, t, step_size=step_size)
         # x = langevin_correction(x, t, step_size=step_size)
         # x = mala(x, t, step_size=step_size)
         pbar.update(step_size)
