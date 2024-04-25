@@ -57,6 +57,22 @@ def reverse_ddim_step(x, t, step_size=1, beta=torch.tensor(0.01)):
     x = torch.sqrt(alpha_cumrpod_prev) * x0_t + c2 * predicted_noise
     return x
 
+def reverse_ddpm_step(x, t, step_size=1, beta=torch.tensor(0.01)):
+    alpha = 1 - beta
+    alpha_cumprod = alpha ** t
+    alpha_cumrpod_prev = alpha ** (t - step_size)
+
+    # predicted_noise = -grad_log_p(x, t) * torch.sqrt(1 -alpha_cumprod)
+    # x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_cumprod)))) / torch.sqrt(alpha_cumprod)
+    # # c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+    # c1 = 1 * torch.sqrt((1 - alpha_cumprod / alpha_cumrpod_prev) * (1 - alpha_cumrpod_prev) / (1-alpha_cumprod))
+    # # c2 = torch.sqrt((1 - alpha_cumrpod_prev) - c1 ** 2)
+    # x = torch.sqrt(alpha_cumrpod_prev) * x0_t + c1 * torch.randn_like(x)
+    predicted_noise = -grad_log_p(x, t) #* torch.sqrt(1 -alpha_cumprod)
+    x0_t = (x - beta * predicted_noise)/ torch.sqrt(alpha)
+    x = x0_t + beta.sqrt() * torch.randn_like(x)
+    return x
+
 def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
     current_x = x
     # scale step size to 0 ~ 1
@@ -231,7 +247,8 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
     return x
 
 
-for step_size in [20, 40, 100, 200, 500, 1000]:
+for step_size in [1, 20, 40, 100, 200]:
+# for step_size in [1,2, 5, 10]:
     x = torch.randn(50000).to('cuda')
     pbar = tqdm(total=1000)
     for t in reversed(range(1, 1001)):
@@ -239,8 +256,9 @@ for step_size in [20, 40, 100, 200, 500, 1000]:
         # x = reverse_ode_step(x, t, step_size=step_size)
         # x = reverse_sde_step(x, t, step_size=step_size)
         # x = reverse_ddim_step(x, t, step_size=step_size)
+        x = reverse_ddpm_step(x, t, step_size=step_size)
         # x = langevin_correction_explicit(x, t, step_size=step_size)
-        x = langevin_correction_alg1(x, t, step_size=step_size)
+        # x = langevin_correction_alg1(x, t, step_size=step_size)
         # x = langevin_correction_with_rejection_alg1(x, t, step_size=step_size)
         # x = langevin_correction(x, t, step_size=step_size)
         # x = mala(x, t, step_size=step_size)
