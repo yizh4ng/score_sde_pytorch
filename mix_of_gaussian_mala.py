@@ -29,11 +29,13 @@ def mala(num_samples, num_independent_samples, x_init, step_size):
     x = x_init
     pbar = tqdm(total=num_samples)
     for _ in range(num_samples - 1):  # 只保存最后一个样本
-        # x_new = x + step_size * grad_log_prob(x) + (2.0 * step_size) ** 0.5 * torch.randn_like(x).to('cuda')
-        # accept_ratio = torch.exp(log_prob(x_new) - log_prob(x) + 0.5 * ((x_new - x - step_size * grad_log_prob(x)) ** 2) / (2 * step_size) - 0.5 * ((x - x_new - step_size * grad_log_prob(x_new)) ** 2) / (2 * step_size))
-        # accept = torch.rand_like(x).to('cuda') < accept_ratio
-        # x = torch.where(accept, x_new, x)
-        x = x + step_size * grad_log_prob(x) + (2.0 * step_size) ** 0.5 * torch.randn_like(x).to('cuda')
+        x_new = x + step_size * grad_log_prob(x) + (2.0 * step_size) ** 0.5 * torch.randn_like(x).to('cuda')
+        accept_ratio = torch.exp(log_prob(x_new) - log_prob(x)
+                                 + 0.5 * ((x_new - x - step_size * grad_log_prob(x)) ** 2) / (2 * step_size)
+                                 - 0.5 * ((x - x_new - step_size * grad_log_prob(x_new)) ** 2) / (2 * step_size))
+        accept = torch.rand_like(x).to('cuda') < accept_ratio
+        x = torch.where(accept, x_new, x)
+        # x = x + step_size * grad_log_prob(x) + (2.0 * step_size) ** 0.5 * torch.randn_like(x).to('cuda')
         pbar.update(1)
     pbar.close()
     return x
@@ -51,13 +53,13 @@ print("Final samples shape:", final_samples.shape)  # 应该是 (num_independent
 
 import matplotlib.pyplot as plt
 # # 可视化结果
-plt.figure(figsize=(10, 6))
-plt.hist(final_samples.to('cpu').numpy(), bins=100, alpha=0.75, density=True, label='MALA Samples')
-plt.title('Histogram of MALA Samples')
-plt.xlabel('Value')
-plt.ylabel('Density')
-plt.legend()
-plt.show()
+# plt.figure(figsize=(10, 6))
+# plt.hist(final_samples.to('cpu').numpy(), bins=100, alpha=0.75, density=True, label='MALA Samples')
+# plt.title('Histogram of MALA Samples')
+# plt.xlabel('Value')
+# plt.ylabel('Density')
+# plt.legend()
+# plt.show()
 
 y = torch.concat([torch.randn(25000) * 0.3 + 1, torch.randn(25000) * 0.3 - 1]).to('cuda')
 # hist = torch.histc(y, bins=50, min=-5, max=5).to('cpu')
