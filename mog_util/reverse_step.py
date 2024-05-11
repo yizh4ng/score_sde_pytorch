@@ -2,16 +2,16 @@ import torch
 
 
 # gaussian_mode = [1, -1]
-# gaussian_sigma = [0.9, 0.2]
+# gaussian_sigma = [0.3, 0.3]
 # gaussian_prob = [0.5, 0.5]
 
-# gaussian_mode = [-1, 0, 1]
-# gaussian_sigma = [0.1, 0.1, 0.1]
-# gaussian_prob = torch.ones(len(gaussian_sigma)) / len(gaussian_sigma)
-
-gaussian_mode = [-1, -0.5, 0, 0.5, 1]
-gaussian_sigma = (0.1, ) * len(gaussian_mode)
+gaussian_mode = [-1, 0, 1]
+gaussian_sigma = [0.1, 0.1, 0.1]
 gaussian_prob = torch.ones(len(gaussian_sigma)) / len(gaussian_sigma)
+
+# gaussian_mode = [-1, -0.5, 0, 0.5, 1]
+# gaussian_sigma = (0.1, ) * len(gaussian_mode)
+# gaussian_prob = torch.ones(len(gaussian_sigma)) / len(gaussian_sigma)
 
 # y = torch.concat([torch.randn(25000) * 0.3 + 1, torch.randn(25000) * 0.3 - 1]).to('cuda')
 simulated_ground_truth = []

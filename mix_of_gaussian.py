@@ -14,13 +14,12 @@ reverse_fucs = ['alg1', 'alg1mala']
 # step_sizes = [10, 40, 100, 200, 500]
 total_steps = [2, 5, 10, 25]
 mcmc_steps  = [20]
-mcmc_step_sizes_scale = [0.1, 1, 10]
+mcmc_step_sizes_scale = [0.1, 0.3, 0.7,  1, 3, 5,7,  10]
 
-reverse_fucs = ['ddpm']
-# step_sizes = [10, 40, 100, 200, 500]
-total_steps = [42, 105, 210, 525]
-mcmc_steps  = [None]
-mcmc_step_sizes_scale = [None]
+# reverse_fucs = ['ddpm']
+# total_steps = [42, 105, 210, 525]
+# mcmc_steps  = [None]
+# mcmc_step_sizes_scale = [None]
 
 # parameters_combinations = list(itertools.product(reverse_fucs, step_sizes, mcmc_steps, mcmc_step_sizes_scale))
 parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc_steps, mcmc_step_sizes_scale))
