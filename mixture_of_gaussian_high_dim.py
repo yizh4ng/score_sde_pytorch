@@ -7,11 +7,11 @@ from mog_util.misc_high_dim import estimate_marginal_accuracy
 from mog_util.reverse_step_high_dim import *
 
 
-# reverse_fucs = ['alg1', 'alg1mala']
-# # step_sizes = [10, 40, 100, 200, 500]
-# total_steps = [2, 5, 10, 25]
-# mcmc_steps  = [20]
-# mcmc_step_sizes_scale = [0.1, 1, 10]
+reverse_fucs = ['alg1', 'alg1mala']
+# step_sizes = [10, 40, 100, 200, 500]
+total_steps = [2, 5, 10, 25]
+mcmc_steps  = [20]
+mcmc_step_sizes_scale = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 
 reverse_fucs = ['ddpm']
 # step_sizes = [10, 40, 100, 200, 500]

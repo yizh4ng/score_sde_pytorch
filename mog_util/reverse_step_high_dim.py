@@ -1,11 +1,38 @@
 import torch
 
 
+# idnetical
 d = 10  # Dimensionality
 pis = torch.tensor([0.5, 0.5]).to('cuda') # the probability of each gaussian. pis.sum() should be 1
-# mus = [torch.tensor([1.0, 1.0]).to('cuda'), torch.tensor([-1.0, -1.0]).to('cuda')]
 mus = [torch.tensor((0.3,) * d).to('cuda'), torch.tensor((-0.3,) * d).to('cuda')]
 sigmas = [0.3 * torch.eye(d).to('cuda'), 0.3 * torch.eye(d).to('cuda')]
+
+# 一圈高斯
+# 高斯数量和维度
+k = 6
+d = 10
+radius = 1.0  # 圆的半径
+
+# 初始化存储参数的张量
+mus = torch.zeros((k, d)).to('cuda')
+sigmas = torch.zeros((k, d, d)).to('cuda')
+pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+# 生成2D平面上均匀分布的角度
+angles = torch.linspace(0, 2 * torch.pi, k)
+# 生成 means
+for i in range(k):
+    x = radius * torch.cos(angles[i])
+    y = radius * torch.sin(angles[i])
+    # 在2D平面上均匀分布，并在剩余维度上添加小的随机偏移
+    mus[i, :2] = torch.tensor([x, y]).to('cuda')
+    # mus[i, 2:] = torch.randn(8) * 0.1  # 剩余维度的小随机偏移
+    mus[i, 2:] = 0
+# 生成 covariance matrices
+for i in range(k):
+    # 对角线上的元素表示每个维度上的方差
+    # diagonal = torch.rand(d) * 0.5 + 0.5  # 范围在[0.5, 1.0]之间
+    diagonal = torch.ones(d).to('cuda')
+    sigmas[i] = torch.diag(diagonal)
 
 def grad_log_p(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
     n_samples = x_t.shape[0]  # Number of samples in the batch
