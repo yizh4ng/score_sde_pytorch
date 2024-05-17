@@ -1,22 +1,26 @@
 import torch
 
 
-# idnetical
-d = 10  # Dimensionality
-pis = torch.tensor([0.5, 0.5]).to('cuda') # the probability of each gaussian. pis.sum() should be 1
-mus = [torch.tensor((0.3,) * d).to('cuda'), torch.tensor((-0.3,) * d).to('cuda')]
-sigmas = [0.3 * torch.eye(d).to('cuda'), 0.3 * torch.eye(d).to('cuda')]
+# identical
+# d = 10  # Dimensionality
+# pis = torch.tensor([0.5, 0.5]).to('cuda') # the probability of each gaussian. pis.sum() should be 1
+# mus = [torch.tensor((0.3,) * d).to('cuda'), torch.tensor((-0.3,) * d).to('cuda')]
+# sigmas = [0.3 * torch.eye(d).to('cuda'), 0.3 * torch.eye(d).to('cuda')]
 
 # 一圈高斯
 # 高斯数量和维度
-k = 6
-d = 10
-radius = 1.0  # 圆的半径
+k = 12 # 高斯的数量
+d = 10 # 合成数据的维度
+radius = 1  # 圆的半径
+sigma = 0.1 # 每个高斯的标准差
+mean_off_set = torch.ones((k, d)).to('cuda') * 1 # 对分布进行偏移
+pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+# pis = torch.tensor([1,2,3,4,5,6]).to('cuda')
+# pis = pis / pis.sum()
 
 # 初始化存储参数的张量
 mus = torch.zeros((k, d)).to('cuda')
 sigmas = torch.zeros((k, d, d)).to('cuda')
-pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
 # 生成2D平面上均匀分布的角度
 angles = torch.linspace(0, 2 * torch.pi, k)
 # 生成 means
@@ -27,14 +31,16 @@ for i in range(k):
     mus[i, :2] = torch.tensor([x, y]).to('cuda')
     # mus[i, 2:] = torch.randn(8) * 0.1  # 剩余维度的小随机偏移
     mus[i, 2:] = 0
+mus = mus + mean_off_set
+
 # 生成 covariance matrices
 for i in range(k):
     # 对角线上的元素表示每个维度上的方差
     # diagonal = torch.rand(d) * 0.5 + 0.5  # 范围在[0.5, 1.0]之间
-    diagonal = torch.ones(d).to('cuda')
+    diagonal = torch.ones(d).to('cuda') * sigma
     sigmas[i] = torch.diag(diagonal)
 
-def grad_log_p(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
+def grad_log_p_old(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
     n_samples = x_t.shape[0]  # Number of samples in the batch
     d = x_t.shape[1]  # Dimensionality of each sample
     k = len(pis)  # Number of mixture components
@@ -66,10 +72,45 @@ def grad_log_p(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).
         weighted_sum += weighted_density_i.unsqueeze(1) * (sigma_i_t_inv @ diff.T).T
 
     # Compute the gradient of the log probability
-    grad_log_p = -weighted_sum / p_x_t.unsqueeze(1)
-
+    grad_log_p = -weighted_sum / (p_x_t.unsqueeze(1) + 1e-15)
     return grad_log_p
-def log_p(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
+
+
+def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
+    n_samples = x_t.shape[0]  # Number of samples in the batch
+    d = x_t.shape[1]  # Dimensionality of each sample
+    k = pis.shape[0]  # Number of mixture components
+
+    # Ensure mus and sigmas are properly expanded for batch operations
+    mu_t = mus * torch.exp(-0.5 * beta * t)
+    sigma_t = sigmas * torch.exp(-beta * t) + (1 - torch.exp(-beta * t)) * torch.eye(d, device=x_t.device)
+
+    # Inverse and determinant of covariance matrix
+    sigma_t_inv = torch.inverse(sigma_t)
+    det_sigma_t = torch.det(sigma_t)
+
+    # Broadcasting mu_t for each sample and mixture component
+    mu_t_expanded = mu_t.unsqueeze(1).expand(k, n_samples, d)
+    x_t_expanded = x_t.unsqueeze(0).expand(k, n_samples, d)
+    diff = x_t_expanded - mu_t_expanded
+
+    # Perform matrix multiplication and exponent calculation with einsum
+    exp_component = torch.exp(-0.5 * torch.einsum('kni,kij,knj->kn', diff, sigma_t_inv, diff))
+    normal_density = exp_component / torch.sqrt((2 * torch.pi) ** d * det_sigma_t.unsqueeze(1))
+
+    # Weight the density by the mixture coefficients
+    weighted_density = pis.unsqueeze(1) * normal_density
+    p_x_t = weighted_density.sum(0)
+
+    # Accumulate the weighted sum for the gradient calculation
+    weighted_sum = torch.einsum('kn,kni->ni', weighted_density, torch.einsum('kij,knj->kni', sigma_t_inv, diff))
+
+    # Compute the gradient of the log probability
+    grad_log_p = -weighted_sum / (p_x_t.unsqueeze(-1) + 1e-15)
+    return grad_log_p
+
+
+def log_p_old(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
     n_samples = x_t.shape[0]  # Number of samples in the batch
     d = x_t.shape[1]  # Dimensionality of each sample
     k = len(pis)  # Number of mixture components
@@ -100,6 +141,33 @@ def log_p(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('c
 
     return log_p_x_t
 
+def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
+    n_samples = x_t.shape[0]  # Number of samples in the batch
+    d = x_t.shape[1]  # Dimensionality of each sample
+    k = pis.shape[0]  # Number of mixture components
+
+    # Ensure mus and sigmas are properly expanded for batch operations
+    mu_t = mus * torch.exp(-0.5 * beta * t)
+    sigma_t = sigmas * torch.exp(-beta * t) + (1 - torch.exp(-beta * t)) * torch.eye(d, device=x_t.device)
+
+    # Inverse and determinant of covariance matrix
+    sigma_t_inv = torch.inverse(sigma_t)
+    det_sigma_t = torch.det(sigma_t)
+
+    # Broadcasting mu_t for each sample and mixture component
+    mu_t_expanded = mu_t.unsqueeze(1).expand(k, n_samples, d)
+    x_t_expanded = x_t.unsqueeze(0).expand(k, n_samples, d)
+    diff = x_t_expanded - mu_t_expanded
+
+    # Perform matrix multiplication and exponent calculation with einsum
+    exp_component = torch.exp(-0.5 * torch.einsum('kni,kij,knj->kn', diff, sigma_t_inv, diff))
+    normal_density = exp_component / torch.sqrt((2 * torch.pi) ** d * det_sigma_t.unsqueeze(1))
+
+    # Weight the density by the mixture coefficients
+    weighted_density = pis.unsqueeze(1) * normal_density
+    p_x_t = weighted_density.sum(0)
+    return torch.log(p_x_t)
+
 def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
     return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size + torch.sqrt(beta * step_size) * torch.randn_like(x)
 
@@ -123,6 +191,21 @@ def reverse_ddim_step(x, t, step_size=1, beta=torch.tensor(0.01), eta=0):
     )
     return x
 
+def reverse_ddpm_drift_step(x, t, step_size=1, beta=torch.tensor(0.01), eta=1):
+    alpha = 1 - beta
+    alpha_cumprod = alpha ** t
+    alpha_cumrpod_prev = alpha ** (t - step_size)
+
+    predicted_noise = -grad_log_p(x, t) * torch.sqrt(1 -alpha_cumprod)
+
+    sigma_t = eta * torch.sqrt((1 - alpha_cumrpod_prev) / (1 - alpha_cumprod) * (1 - alpha_cumprod / alpha_cumrpod_prev))
+
+    x = (
+            torch.sqrt(alpha_cumrpod_prev / alpha_cumprod) * x +
+            (torch.sqrt(1 - alpha_cumrpod_prev - sigma_t ** 2) - torch.sqrt(
+                (alpha_cumrpod_prev * (1 - alpha_cumprod)) / alpha_cumprod)) * predicted_noise
+    )
+    return x
 def reverse_ddpm_step(x, t, step_size=1, beta=torch.tensor(0.01), **kwargs):
     x = reverse_ddim_step(x, t, step_size, beta, eta=1)
     return x
@@ -185,7 +268,8 @@ def mala(x, t, step_size=1, beta=torch.tensor(0.01)):
         x[accept] = x_new[accept]
     return x
 
-def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_steps=20, mcmc_step_size_scale=1):
+def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_steps=20, mcmc_step_size_scale=1,
+                             init=None, weight_scale=1):
     # record current x
     current_x = x
 
@@ -194,7 +278,16 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
 
     # one step ddim as initial state for langevin mcmc
     # x = reverse_sde_step(x, t, step_size, beta)
-    x = reverse_ddim_step(x, t, step_size, beta)
+    if init is not None:
+        if init == 'ddim':
+            x = reverse_ddim_step(x, t, step_size, beta)
+        elif init == 'ddpm':
+            x = reverse_ddpm_step(x, t, step_size, beta)
+        elif init == 'ddpm_drift':
+            x = reverse_ddpm_drift_step(x, t, step_size, beta)
+        else:
+            raise NotImplementedError
+        # x = reverse_ddpm_step(x, t, step_size, beta)
     # x = reverse_ode_step(x, t, step_size, beta)
 
     # avoid final redundant mcmc step
@@ -205,7 +298,7 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
     for _ in range(mcmc_steps):
         # Calculate Score Components
         # weight = 4 * beta * h  # 0.0011 -> 2e-05
-        weight = 2 * (1 - torch.exp(-2 * h))   # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
+        weight = 2 * (1 - torch.exp(-2 * h)) * weight_scale  # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
         # weight = 2 * (1 - torch.exp(-2 * h)) * beta   # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
         # weight = 2 * (1 - torch.exp(-2 * h)) / h ** 0.5  # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
 
@@ -229,15 +322,23 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
     return x
 
 def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor(0.01),
-                                            mcmc_steps=20, mcmc_step_size_scale=1):
+                                            mcmc_steps=20, mcmc_step_size_scale=1, init=None, weight_scale=1):
     # record current x
     current_x = x
     # scale step size to 0 ~ 1
     h = torch.tensor(step_size / 1000).to('cuda')
     # one step ddim as initial state for langevin mcmc
-    x = reverse_ddim_step(x, t, step_size, beta)
+    if init is not None:
+        if init == 'ddim':
+            x = reverse_ddim_step(x, t, step_size, beta)
+        elif init == 'ddpm':
+            x = reverse_ddpm_step(x, t, step_size, beta)
+        elif init == 'ddpm_drift':
+            x = reverse_ddpm_drift_step(x, t, step_size, beta)
+        else:
+            raise NotImplementedError
 
-    # avoid final redundant mcmc step
+            # avoid final redundant mcmc step
     # if t - step_size < 1e-8:
     #     return x
 
@@ -245,7 +346,7 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
     # weight = 4 * beta * h
     # weight = torch.tensor(1).to('cuda')
     # weight = 2 * h
-    weight = 2 * (1 - torch.exp(-2 * h))  # 0.0011 -> 2e-05
+    weight = 2 * (1 - torch.exp(-2 * h)) * weight_scale# 0.0011 -> 2e-05
     # weight = 2 *  (1-torch.exp(-2 * h)) * beta # 0.0011 -> 2e-05
     # weight = 2 * (1 - torch.exp(-2 * h)) / h ** 0.5   # 0.0011 -> 2e-05
 

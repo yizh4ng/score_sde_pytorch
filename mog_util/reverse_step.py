@@ -1,13 +1,13 @@
 import torch
 
 
-# gaussian_mode = [1, -1]
-# gaussian_sigma = [0.3, 0.3]
-# gaussian_prob = [0.5, 0.5]
+gaussian_mode = [0, -3]
+gaussian_sigma = [1, 1]
+gaussian_prob = [0.5, 0.5]
 
-gaussian_mode = [-1, 0, 1]
-gaussian_sigma = [0.1, 0.1, 0.1]
-gaussian_prob = torch.ones(len(gaussian_sigma)) / len(gaussian_sigma)
+# gaussian_mode = [-1, 0, 1]
+# gaussian_sigma = [0.1, 0.1, 0.1]
+# gaussian_prob = torch.ones(len(gaussian_sigma)) / len(gaussian_sigma)
 
 # gaussian_mode = [-1, -0.5, 0, 0.5, 1]
 # gaussian_sigma = (0.1, ) * len(gaussian_mode)
