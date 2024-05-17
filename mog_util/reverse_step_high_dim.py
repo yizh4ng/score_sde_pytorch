@@ -9,20 +9,23 @@ import torch
 
 # 一圈高斯
 # 高斯数量和维度
-k = 12 # 高斯的数量
-d = 10 # 合成数据的维度
+k = 6 # 高斯的数量
+d = 2 # 合成数据的维度
 radius = 1  # 圆的半径
 sigma = 0.1 # 每个高斯的标准差
-mean_off_set = torch.ones((k, d)).to('cuda') * 1 # 对分布进行偏移
-pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
-# pis = torch.tensor([1,2,3,4,5,6]).to('cuda')
-# pis = pis / pis.sum()
+mean_off_set = torch.ones((k, d)).to('cuda') * 0 # 对分布进行偏移
+# mean_off_set = torch.ones((k, d)).to('cuda') * 0.5 # 对分布进行偏移
+# pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+pis = torch.tensor([1,2,3,4,5,6]).to('cuda')
+pis = pis / pis.sum()
+grad_log_p_noise = 0
+log_p_noise = 0
 
 # 初始化存储参数的张量
 mus = torch.zeros((k, d)).to('cuda')
 sigmas = torch.zeros((k, d, d)).to('cuda')
 # 生成2D平面上均匀分布的角度
-angles = torch.linspace(0, 2 * torch.pi, k)
+angles = torch.linspace(0, 2 * torch.pi, k + 1)[:k]
 # 生成 means
 for i in range(k):
     x = radius * torch.cos(angles[i])
@@ -39,41 +42,6 @@ for i in range(k):
     # diagonal = torch.rand(d) * 0.5 + 0.5  # 范围在[0.5, 1.0]之间
     diagonal = torch.ones(d).to('cuda') * sigma
     sigmas[i] = torch.diag(diagonal)
-
-def grad_log_p_old(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
-    n_samples = x_t.shape[0]  # Number of samples in the batch
-    d = x_t.shape[1]  # Dimensionality of each sample
-    k = len(pis)  # Number of mixture components
-    weighted_sum = torch.zeros_like(x_t)
-    p_x_t = torch.zeros(n_samples).to('cuda')
-
-    for i in range(k):
-        mu_i = mus[i]
-        sigma_i = sigmas[i]
-
-        # Time-dependent mean and covariance
-        mu_i_t = mu_i * torch.exp(-0.5 * beta * t)
-        sigma_i_t = sigma_i * torch.exp(-beta * t) + (1 - torch.exp(-beta * t)) * torch.eye(d).to(x_t.device)
-
-        # Inverse and determinant of covariance matrix
-        sigma_i_t_inv = torch.inverse(sigma_i_t)
-        det_sigma_i_t = torch.det(sigma_i_t)
-
-        # Compute the Gaussian density
-        diff = x_t - mu_i_t
-        exp_component = torch.exp(-0.5 * torch.sum(diff @ sigma_i_t_inv * diff, dim=1))
-        normal_density_i = exp_component / torch.sqrt((2 * torch.pi) ** d * det_sigma_i_t)
-
-        # Weight the density by the mixture coefficients
-        weighted_density_i = pis[i] * normal_density_i
-        p_x_t += weighted_density_i
-
-        # Accumulate the weighted sum for the gradient calculation
-        weighted_sum += weighted_density_i.unsqueeze(1) * (sigma_i_t_inv @ diff.T).T
-
-    # Compute the gradient of the log probability
-    grad_log_p = -weighted_sum / (p_x_t.unsqueeze(1) + 1e-15)
-    return grad_log_p
 
 
 def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
@@ -107,39 +75,10 @@ def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
 
     # Compute the gradient of the log probability
     grad_log_p = -weighted_sum / (p_x_t.unsqueeze(-1) + 1e-15)
+    if grad_log_p_noise != 0:
+        noise_std = grad_log_p_noise * torch.abs(grad_log_p)
+        grad_log_p = grad_log_p + torch.randn_like(grad_log_p) * noise_std
     return grad_log_p
-
-
-def log_p_old(x_t, t, mus=mus, sigmas=sigmas, pis=pis, beta=torch.tensor(0.01).to('cuda')):
-    n_samples = x_t.shape[0]  # Number of samples in the batch
-    d = x_t.shape[1]  # Dimensionality of each sample
-    k = len(pis)  # Number of mixture components
-    log_p_x_t = torch.zeros(n_samples, device=x_t.device)
-
-    for i in range(k):
-        mu_i = mus[i]
-        sigma_i = sigmas[i]
-
-        # Time-dependent mean and covariance
-        mu_i_t = mu_i * torch.exp(-0.5 * beta * t)
-        sigma_i_t = sigma_i * torch.exp(-beta * t) + (1 - torch.exp(-beta * t)) * torch.eye(d, device=x_t.device)
-
-        # Inverse and determinant of the covariance matrix
-        sigma_i_t_inv = torch.inverse(sigma_i_t)
-        det_sigma_i_t = torch.det(sigma_i_t)
-
-        # Compute the Gaussian density
-        diff = x_t - mu_i_t
-        exp_component = torch.exp(-0.5 * torch.sum(diff @ sigma_i_t_inv * diff, dim=1))
-        normal_density_i = exp_component / torch.sqrt((2 * torch.pi) ** d * det_sigma_i_t)
-
-        # Accumulate the log probability
-        log_p_x_t += pis[i] * normal_density_i
-
-    # Take the log of the accumulated probabilities
-    log_p_x_t = torch.log(log_p_x_t)
-
-    return log_p_x_t
 
 def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     n_samples = x_t.shape[0]  # Number of samples in the batch
@@ -166,7 +105,14 @@ def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     # Weight the density by the mixture coefficients
     weighted_density = pis.unsqueeze(1) * normal_density
     p_x_t = weighted_density.sum(0)
-    return torch.log(p_x_t)
+    # return torch.log(p_x_t)
+    log_p_x_t = torch.log(p_x_t)
+
+    if log_p_noise != 0:
+        noise_std = log_p_noise * torch.abs(log_p_x_t)
+        log_p_x_t = log_p_x_t + torch.randn_like(log_p_x_t) * noise_std
+
+    return log_p_x_t
 
 def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
     return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size + torch.sqrt(beta * step_size) * torch.randn_like(x)
@@ -297,7 +243,7 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
     # set 10 step langevin iteration
     for _ in range(mcmc_steps):
         # Calculate Score Components
-        # weight = 4 * beta * h  # 0.0011 -> 2e-05
+        # weight = 4 * h  # 0.0011 -> 2e-05
         weight = 2 * (1 - torch.exp(-2 * h)) * weight_scale  # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
         # weight = 2 * (1 - torch.exp(-2 * h)) * beta   # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
         # weight = 2 * (1 - torch.exp(-2 * h)) / h ** 0.5  # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
@@ -315,7 +261,12 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
 
         # update x (codes from langevin corrector for score sde)
         # inner_step_size = torch.tensor(weight/100 * torch.tensor(d).to('cuda').sqrt())
+
+        # inner_step_size = torch.tensor(weight/100) * mcmc_step_size_scale * (1000/step_size) / 25
+        # inner_step_size = torch.tensor(weight / 10 * (h / 0.5) ** 1) * mcmc_step_size_scale * (1000 / step_size) / 25
+        # inner_step_size = torch.tensor(weight/100) * step_size / 100 * mcmc_step_size_scale
         inner_step_size = torch.tensor(weight/100) * mcmc_step_size_scale
+
         # inner_step_size = torch.tensor(weight/100)
         x_mean = x + inner_step_size * grad
         x = x_mean + torch.sqrt(inner_step_size * 2) * noise
@@ -350,8 +301,9 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
     # weight = 2 *  (1-torch.exp(-2 * h)) * beta # 0.0011 -> 2e-05
     # weight = 2 * (1 - torch.exp(-2 * h)) / h ** 0.5   # 0.0011 -> 2e-05
 
-    inner_step_size = torch.tensor(weight / 10 * (h / 0.5) ** 1 ) * mcmc_step_size_scale
-    # inner_step_size = torch.tensor(weight / 10)
+    inner_step_size = torch.tensor(weight / 10 * (h / 0.5) ** 1 ) * mcmc_step_size_scale * (1000/step_size) / 25
+    # inner_step_size = torch.tensor(weight / 100) * mcmc_step_size_scale
+    # inner_step_size = torch.tensor(weight / 100) *  step_size / 100 * mcmc_step_size_scale
     # inner_step_size = torch.tensor(weight / 10 * torch.tensor(d).to('cuda').sqrt())
     # inner_step_size = torch.tensor(weight / 10 * 0.2)
     # inner_step_size = torch.tensor(weight / 10 * (0.04 / 0.5) ** 1.3)
@@ -403,9 +355,9 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
 
     return x
 
-reverse_step_dict = {'ddpm': reverse_ddpm_step,
-                     'alg1': langevin_correction_alg1,
-                     'alg1mala': langevin_correction_with_rejection_alg1}
+reverse_step_dict = {'DDPM': reverse_ddpm_step,
+                     'Langevin': langevin_correction_alg1,
+                     'MALA': langevin_correction_with_rejection_alg1}
 
 
 def sample_gaussian_mixture(pis=pis, d=d, mus=mus, sigmas=sigmas, num_samples=50000):
