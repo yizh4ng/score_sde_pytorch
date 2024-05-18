@@ -14,10 +14,11 @@ reverse_fucs = ['Langevin', 'MALA']
 # reverse_fucs = ['alg1mala']
 # total_steps = [1]
 total_steps = [5]
-mcmc_steps  = list(range(2, 26 * 20, 20))
-# mcmc_step_sizes_scale = [0.6, 0.8, 1, 1.5, 3]
-mcmc_step_sizes_scale = [1,2,4,8]
-inits = ['ddpm']
+mcmc_steps  = list(range(20, 26 * 20, 20))
+# mcmc_step_sizes_scale = [4]
+mcmc_step_sizes_scale = [4]
+# mcmc_step_sizes_scale = [1,2,3, 4, 5,6,7,8]
+inits = ['ddim']
 weight_scale = [1]
 #
 parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc_steps, mcmc_step_sizes_scale,

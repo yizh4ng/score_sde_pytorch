@@ -10,15 +10,15 @@ import torch
 # 一圈高斯
 # 高斯数量和维度
 k = 6 # 高斯的数量
-d = 2 # 合成数据的维度
-radius = 1  # 圆的半径
+d = 10 # 合成数据的维度
+radius = 0.5  # 圆的半径
 sigma = 0.1 # 每个高斯的标准差
 mean_off_set = torch.ones((k, d)).to('cuda') * 0 # 对分布进行偏移
 # mean_off_set = torch.ones((k, d)).to('cuda') * 0.5 # 对分布进行偏移
-# pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
-pis = torch.tensor([1,2,3,4,5,6]).to('cuda')
-pis = pis / pis.sum()
-grad_log_p_noise = 0
+pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+# pis = torch.tensor([1,1,1,10,10,10]).to('cuda')
+# pis = pis / pis.sum()
+grad_log_p_noise = 0.22
 log_p_noise = 0
 
 # 初始化存储参数的张量
@@ -77,7 +77,7 @@ def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     grad_log_p = -weighted_sum / (p_x_t.unsqueeze(-1) + 1e-15)
     if grad_log_p_noise != 0:
         noise_std = grad_log_p_noise * torch.abs(grad_log_p)
-        grad_log_p = grad_log_p + torch.randn_like(grad_log_p) * noise_std
+        grad_log_p = grad_log_p + torch.ones_like(grad_log_p) * noise_std
     return grad_log_p
 
 def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
