@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def compute_tv_distance(p, q):
@@ -76,3 +77,37 @@ def visualize_hist(x, title, save_path=None):
         plt.savefig(save_path)
     # plt.show()
     plt.close()
+
+def visualize_cluster(data, title, mode=['hist', 'cluster'], alpha=0.01):
+    if 'cluster' in mode:
+        import matplotlib.pyplot as plt
+        _data = data.cpu().numpy()
+        np.random.shuffle(_data)
+        plt.figure(figsize=(6, 6))  # Set the figure size
+        scatter = plt.scatter(_data[:, 0], _data[:, 1], alpha=alpha, cmap='viridis',
+                              s=10)  # s is the size of points
+        plt.title(title)
+        plt.xlabel('Dimension 1')
+        plt.ylabel('Dimension 2')
+        plt.xlim(-2, 2)
+        plt.ylim(-2, 2)
+        plt.tight_layout()
+        plt.savefig(f'{title}.png', dpi=600, bbox_inches='tight')
+        # plt.show()
+        plt.close()
+    if 'hist' in mode:
+        # data = data.cpu().numpy()
+        data = data[(data[:,0] < -0.75) & (data[:, 1] < 0.5) & (data[:, 1] > -0.5)]
+        hist = torch.histc(data[:, 1], bins = 50, min = -0.5, max = 0.5).to('cpu')
+        # hist = np.histogram(data[:, 1], bins = 50, range = (-0.5, 0.5))
+        import matplotlib.pyplot as plt
+        bins = range(50)
+        plt.bar(bins, hist, align='center')
+        plt.xlabel('Bins')
+        plt.ylabel('Frequency')
+        # plt.title(f'kl div: {mc:.6f}, step szie: {step_size}')
+        plt.title(title)
+        # plt.savefig(f'./test/{step_size}_sde.png')
+        plt.savefig(f'{title}_dim.png', dpi=600, bbox_inches='tight')
+        # plt.show()
+        plt.close()

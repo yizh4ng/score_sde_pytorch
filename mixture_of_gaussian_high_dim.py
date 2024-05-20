@@ -2,7 +2,10 @@ import torch
 import numpy as np
 import itertools
 from tqdm import tqdm
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '6'
 
+from mog_util.misc import visualize_cluster
 from mog_util.misc_high_dim import estimate_marginal_accuracy
 from mog_util.reverse_step_high_dim import *
 import warnings
@@ -24,12 +27,13 @@ weight_scale = [1]
 reverse_fucs = ['DDPM']
 # total_steps = [40, 100, 200, 500]
 # total_steps = [42, 105, 210, 525]
-total_steps = list(range(20, 26 * 20, 20))
-# total_steps = [5 * 21]
+# total_steps, vis = list(range(20, 26 * 20, 20)), False
+total_steps, vis = [200], True
 mcmc_steps  = [None]
 mcmc_step_sizes_scale = [None]
 inits = [None]
 weight_scale = [None]
+visualize = lambda _x, _title : visualize_cluster(_x, _title, ['cluster', 'hist'], alpha=0.01)
 
 parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc_steps, mcmc_step_sizes_scale,
                                                  inits, weight_scale))
@@ -38,22 +42,6 @@ import pandas as pd
 
 df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_size_scale', 'inits', 'weight_scale', 'ma'])
 
-def vis(data, title):
-    import matplotlib.pyplot as plt
-    data = data.cpu().numpy()
-    np.random.shuffle(data)
-    plt.figure(figsize=(6, 6))  # Set the figure size
-    scatter = plt.scatter(data[:50000, 0], data[:50000, 1], alpha=0.05, cmap='viridis',
-                          s=10)  # s is the size of points
-    plt.title(title)
-    plt.xlabel('Dimension 1')
-    plt.ylabel('Dimension 2')
-    plt.xlim(-2, 2)
-    plt.ylim(-2, 2)
-    plt.tight_layout()
-    plt.savefig(f'{title}.png', dpi=600, bbox_inches='tight')
-    plt.show()
-    plt.close()
 
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
@@ -67,7 +55,9 @@ for parameters in parameters_combinations:
         pbar.update(1000/total_step)
     pbar.close()
 
-    # vis(x, f'{parameters[0]}')
+    if vis:
+        visualize(x, f'{parameters[0]}')
+
 
     mc = estimate_marginal_accuracy(y, x)
 
@@ -92,4 +82,5 @@ for reverse_fuc in reverse_fucs:
         print(float(best_performance['ma'].values))
         # print(best_performance.values)
 
-# vis(y, 'Ground Truth Samples')
+if vis:
+    visualize(y, 'Ground Truth Samples')

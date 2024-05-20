@@ -2,7 +2,10 @@ import torch
 import numpy as np
 import itertools
 from tqdm import tqdm
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
+from mog_util.misc import visualize_cluster
 from mog_util.misc_high_dim import estimate_marginal_accuracy
 from mog_util.reverse_step_high_dim import *
 import warnings
@@ -10,16 +13,27 @@ warnings.filterwarnings("ignore", message="To copy construct from a tensor,")
 warnings.filterwarnings("ignore", message="clamping frac")
 
 
-reverse_fucs = ['Langevin', 'MALA']
-# reverse_fucs = ['alg1mala']
-# total_steps = [1]
-total_steps = [5]
-mcmc_steps  = list(range(20, 26 * 20, 20))
-# mcmc_step_sizes_scale = [4]
-mcmc_step_sizes_scale = [4]
+# reverse_fucs = ['Langevin', 'MALA']
+# reverse_fucs, mcmc_step_sizes_scale = ['Langevin'],  [0.2]
+# reverse_fucs, mcmc_step_sizes_scale = ['MALA'],  [0.8]
+reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  np.linspace(0.1, 1, 10, endpoint=True), True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  np.linspace(1, 2, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(0.1, 1, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(1, 2, 10, endpoint=True), False
+total_steps = [20]
+# total_steps = [8]
+# mcmc_steps, vis  = list(range(20, 26 * 20, 20)), False
+mcmc_steps= [200]
+# mcmc_step_sizes_scale = [0.5]
 # mcmc_step_sizes_scale = [1,2,3, 4, 5,6,7,8]
+# mcmc_step_sizes_scale = [0.01, 0.03,0.1,0.3,1,2,3, 4, 5,6,7,8]
 inits = ['ddim']
 weight_scale = [1]
+visualize = lambda _x, _title : visualize_cluster(_x, _title, ['hist', 'cluster'], alpha=0.01)
+# visualize = lambda _x, _title : visualize_cluster(_x, _title, ['hist'], alpha=0.01)
 #
 parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc_steps, mcmc_step_sizes_scale,
                                                  inits, weight_scale))
@@ -27,23 +41,6 @@ parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc
 import pandas as pd
 
 df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_size_scale', 'inits', 'weight_scale', 'ma'])
-
-def vis(data, title):
-    import matplotlib.pyplot as plt
-    data = data.cpu().numpy()
-    np.random.shuffle(data)
-    plt.figure(figsize=(6, 6))  # Set the figure size
-    scatter = plt.scatter(data[:50000, 0], data[:50000, 1], alpha=0.05, cmap='viridis',
-                          s=10)  # s is the size of points
-    plt.title(title)
-    plt.xlabel('Dimension 1')
-    plt.ylabel('Dimension 2')
-    plt.xlim(-2, 2)
-    plt.ylim(-2, 2)
-    plt.tight_layout()
-    plt.savefig(f'{title}.png', dpi=600, bbox_inches='tight')
-    plt.show()
-    plt.close()
 
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
@@ -58,7 +55,9 @@ for parameters in parameters_combinations:
         pbar.update(1000/total_step)
     pbar.close()
 
-    # vis(x, f'{parameters[0]}')
+    if vis:
+        # visualize(x, f'{parameters[0]}_{mcmc_step_size_scale}')
+        visualize(x, f'{parameters[0]}')
 
     mc = estimate_marginal_accuracy(y, x, num_bins=200)
 
@@ -83,4 +82,5 @@ for reverse_fuc in reverse_fucs:
         print(float(best_performance['ma'].values))
         # print(best_performance.values)
 
-# vis(y, 'Ground Truth Samples')
+if vis:
+    visualize(y, 'Ground Truth Samples')

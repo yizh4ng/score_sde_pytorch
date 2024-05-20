@@ -1,47 +1,6 @@
 import torch
 
-
-# identical
-# d = 10  # Dimensionality
-# pis = torch.tensor([0.5, 0.5]).to('cuda') # the probability of each gaussian. pis.sum() should be 1
-# mus = [torch.tensor((0.3,) * d).to('cuda'), torch.tensor((-0.3,) * d).to('cuda')]
-# sigmas = [0.3 * torch.eye(d).to('cuda'), 0.3 * torch.eye(d).to('cuda')]
-
-# 一圈高斯
-# 高斯数量和维度
-k = 6 # 高斯的数量
-d = 10 # 合成数据的维度
-radius = 0.5  # 圆的半径
-sigma = 0.1 # 每个高斯的标准差
-mean_off_set = torch.ones((k, d)).to('cuda') * 0 # 对分布进行偏移
-# mean_off_set = torch.ones((k, d)).to('cuda') * 0.5 # 对分布进行偏移
-pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
-# pis = torch.tensor([1,1,1,10,10,10]).to('cuda')
-# pis = pis / pis.sum()
-grad_log_p_noise = 0.22
-log_p_noise = 0
-
-# 初始化存储参数的张量
-mus = torch.zeros((k, d)).to('cuda')
-sigmas = torch.zeros((k, d, d)).to('cuda')
-# 生成2D平面上均匀分布的角度
-angles = torch.linspace(0, 2 * torch.pi, k + 1)[:k]
-# 生成 means
-for i in range(k):
-    x = radius * torch.cos(angles[i])
-    y = radius * torch.sin(angles[i])
-    # 在2D平面上均匀分布，并在剩余维度上添加小的随机偏移
-    mus[i, :2] = torch.tensor([x, y]).to('cuda')
-    # mus[i, 2:] = torch.randn(8) * 0.1  # 剩余维度的小随机偏移
-    mus[i, 2:] = 0
-mus = mus + mean_off_set
-
-# 生成 covariance matrices
-for i in range(k):
-    # 对角线上的元素表示每个维度上的方差
-    # diagonal = torch.rand(d) * 0.5 + 0.5  # 范围在[0.5, 1.0]之间
-    diagonal = torch.ones(d).to('cuda') * sigma
-    sigmas[i] = torch.diag(diagonal)
+from mog_util.mog_high_dim_config import pis, mus, sigmas, grad_log_p_noise, log_p_noise, d
 
 
 def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
@@ -77,7 +36,8 @@ def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     grad_log_p = -weighted_sum / (p_x_t.unsqueeze(-1) + 1e-15)
     if grad_log_p_noise != 0:
         noise_std = grad_log_p_noise * torch.abs(grad_log_p)
-        grad_log_p = grad_log_p + torch.ones_like(grad_log_p) * noise_std
+        # grad_log_p = grad_log_p + torch.ones_like(grad_log_p) * noise_std
+        grad_log_p = grad_log_p + torch.randn_like(grad_log_p) * noise_std
     return grad_log_p
 
 def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
@@ -111,6 +71,7 @@ def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     if log_p_noise != 0:
         noise_std = log_p_noise * torch.abs(log_p_x_t)
         log_p_x_t = log_p_x_t + torch.randn_like(log_p_x_t) * noise_std
+        # log_p_x_t = log_p_x_t + torch.ones_like(log_p_x_t) * noise_std
 
     return log_p_x_t
 
