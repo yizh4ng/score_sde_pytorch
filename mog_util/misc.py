@@ -78,19 +78,37 @@ def visualize_hist(x, title, save_path=None):
     # plt.show()
     plt.close()
 
-def visualize_cluster(data, title, mode=['hist', 'cluster'], alpha=0.01):
+def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha=0.01):
+    c = 'grey'
+    label = None
+    if 'DDPM' in title:
+        c = 'blue'
+        label = 'DDPM'
+    if 'MALA' in title:
+        c = 'red'
+        label = 'MALA'
+    if 'Langevin' in title:
+        c = 'orange'
+        label = 'Langevin'
+    if 'ULD' in title:
+        c = 'green'
+        label = 'ULD'
+
     if 'cluster' in mode:
         import matplotlib.pyplot as plt
         _data = data.cpu().numpy()
         np.random.shuffle(_data)
         plt.figure(figsize=(6, 6))  # Set the figure size
-        scatter = plt.scatter(_data[:, 0], _data[:, 1], alpha=alpha, cmap='viridis',
+        scatter = plt.scatter(_data[:, 0], _data[:, 1], alpha=alpha,
+                              # cmap='viridis',
+                              c=c,
                               s=10)  # s is the size of points
         plt.title(title)
         plt.xlabel('Dimension 1')
         plt.ylabel('Dimension 2')
-        plt.xlim(-2, 2)
-        plt.ylim(-2, 2)
+        plt.xlim(-1.75, 1.75)
+        plt.ylim(-1.75, 1.75)
+        plt.grid(True)
         plt.tight_layout()
         plt.savefig(f'{title}.png', dpi=600, bbox_inches='tight')
         # plt.show()
@@ -99,14 +117,36 @@ def visualize_cluster(data, title, mode=['hist', 'cluster'], alpha=0.01):
         # data = data.cpu().numpy()
         data = data[(data[:,0] < -0.75) & (data[:, 1] < 0.5) & (data[:, 1] > -0.5)]
         hist = torch.histc(data[:, 1], bins = 50, min = -0.5, max = 0.5).to('cpu')
-        # hist = np.histogram(data[:, 1], bins = 50, range = (-0.5, 0.5))
+        hist = hist / hist.sum()
         import matplotlib.pyplot as plt
-        bins = range(50)
-        plt.bar(bins, hist, align='center')
+        bins = np.linspace(-0.5, 0.5, 50, endpoint=False)
+        bar_width = bins[1] - bins[0]
+        plt.bar(bins, hist,
+                align='edge',
+                alpha=1, color=c, width=bar_width, label=label)
+
+        # _ground_truth = ground_truth[(ground_truth[:,0] < -0.75) & (ground_truth[:, 1] < 0.5) & (ground_truth[:, 1] > -0.5)]
+        # ground_truth_hist = torch.histc(_ground_truth[:, 1], bins = 50, min = -0.5, max = 0.5).to('cpu')
+        # ground_truth_hist = ground_truth_hist / ground_truth_hist.sum()
+        # hist = np.histogram(data[:, 1], bins = 50, range = (-0.5, 0.5))
+        # plt.bar(bins, ground_truth_hist, align='center', alpha=0.5, color='grey', width=bar_width, label='Ground Truth')
+
+        import scipy.stats as stats
+        weights = (1/3 / 50,) * 3
+        means = (-3.4202e-01, 0, 3.4202e-01)
+        stds = (0.007 ** 0.5, ) * 3
+        # stds = (0.01 ** 0.5, ) * 3
+        x = np.linspace(-0.5, 0.5, 100)
+        pdf = np.zeros_like(x)
+        for weight, mean, std in zip(weights, means, stds):
+            pdf += weight * stats.norm.pdf(x, mean, std)
+        plt.plot(x, pdf, label='Ground Truth', color='grey', linewidth=3)
+
         plt.xlabel('Bins')
-        plt.ylabel('Frequency')
+        plt.ylabel('Probability')
         # plt.title(f'kl div: {mc:.6f}, step szie: {step_size}')
         plt.title(title)
+        plt.legend()
         # plt.savefig(f'./test/{step_size}_sde.png')
         plt.savefig(f'{title}_dim.png', dpi=600, bbox_inches='tight')
         # plt.show()

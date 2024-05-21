@@ -27,13 +27,13 @@ weight_scale = [1]
 reverse_fucs = ['DDPM']
 # total_steps = [40, 100, 200, 500]
 # total_steps = [42, 105, 210, 525]
-# total_steps, vis = list(range(20, 26 * 20, 20)), False
-total_steps, vis = [200], True
+# total_steps, vis = list(range(25, 525, 20)), False
+total_steps, vis = [205], True
 mcmc_steps  = [None]
 mcmc_step_sizes_scale = [None]
 inits = [None]
 weight_scale = [None]
-visualize = lambda _x, _title : visualize_cluster(_x, _title, ['cluster', 'hist'], alpha=0.01)
+visualize = lambda _x, y, _title : visualize_cluster(_x, y, _title, ['cluster', 'hist'], alpha=0.01)
 
 parameters_combinations = list(itertools.product(reverse_fucs, total_steps, mcmc_steps, mcmc_step_sizes_scale,
                                                  inits, weight_scale))
@@ -56,10 +56,10 @@ for parameters in parameters_combinations:
     pbar.close()
 
     if vis:
-        visualize(x, f'{parameters[0]}')
+        visualize(x, y, f'{parameters[0]}')
 
 
-    mc = estimate_marginal_accuracy(y, x)
+    mc = estimate_marginal_accuracy(y, x, num_bins=200)
 
 
     if parameters[0] == 'DDPM':
@@ -82,5 +82,5 @@ for reverse_fuc in reverse_fucs:
         print(float(best_performance['ma'].values))
         # print(best_performance.values)
 
-if vis:
-    visualize(y, 'Ground Truth Samples')
+# if vis:
+#     visualize(y, 'Ground Truth Samples')

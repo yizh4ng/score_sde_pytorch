@@ -1,6 +1,7 @@
 import torch
+from torch.distributions import MultivariateNormal
 
-from mog_util.mog_high_dim_config import pis, mus, sigmas, grad_log_p_noise, log_p_noise, d
+from mog_util.mog_high_dim_config import pis, mus, sigmas, grad_log_p_noise, log_p_noise, d, ground_truth_num
 
 
 def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
@@ -233,6 +234,108 @@ def langevin_correction_alg1(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_st
         x = x_mean + torch.sqrt(inner_step_size * 2) * noise
     return x
 
+def uld(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_steps=20, mcmc_step_size_scale=1,
+                             init=None, weight_scale=1):
+    # record current x
+    current_x = x
+
+    # scale step size to 0 ~ 1
+    h = torch.tensor(step_size / 1000).to('cuda')
+
+    # one step ddim as initial state for langevin mcmc
+    if init is not None:
+        if init == 'ddim':
+            x = reverse_ddim_step(x, t, step_size, beta)
+        elif init == 'ddpm':
+            x = reverse_ddpm_step(x, t, step_size, beta)
+        elif init == 'ddpm_drift':
+            x = reverse_ddpm_drift_step(x, t, step_size, beta)
+        elif init == 'gaussian':
+            x = x + torch.randn_like(x).to('cuda') * torch.sqrt(torch.exp(2 * h) - 1)
+        else:
+            raise NotImplementedError
+
+
+    # set 10 step langevin iteration
+    v = torch.randn_like(x).to('cuda')
+
+    gamma = 50
+    tau = torch.tensor(mcmc_step_size_scale, dtype=torch.float)
+    # mean = torch.tensor([0.0, 0.0])  # 二元高斯的均值向量
+    # covariance = torch.tensor([[2 / gamma * (tau - 2 / gamma * (1 - torch.exp(-gamma * tau))) + 1 / (2 * gamma) * (
+    #             1 - torch.exp(-2 * gamma * tau)),
+    #                             1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau))],
+    #                            [1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau)),
+    #                             1 - torch.exp(-2 * gamma * tau)]])  # 二元高斯的协方巧矩阵
+    #
+    # # 创建多元高斯分布实例
+    # mvn = MultivariateNormal(mean, covariance)
+
+    var_x = 2 / gamma * (tau - 2 / gamma * (1 - torch.exp(-gamma * tau))) + 1 / (2 * gamma) * (
+                1 - torch.exp(-2 * gamma * tau))
+    var_v = 1 - torch.exp(-2 * gamma * tau)
+    cov_xv = 1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau))
+
+    # 构建完整的协方差矩阵
+    Sigma_xx = var_x * torch.eye(d)
+    Sigma_vv = var_v * torch.eye(d)
+    Sigma_xv = cov_xv * torch.eye(d)
+
+    # 构建 2d x 2d 协方差矩阵
+    top_row = torch.cat([Sigma_xx, Sigma_xv], dim=1)
+    bottom_row = torch.cat([Sigma_xv, Sigma_vv], dim=1)
+    cov_matrix = torch.cat([top_row, bottom_row], dim=0)
+
+    # 创建多元正态分布
+    mvn = MultivariateNormal(torch.zeros(2 * d), cov_matrix)
+
+    for _ in range(mcmc_steps):
+        # Calculate Score Components
+        weight = 2 * (1 - torch.exp(-2 * h))   # 0.0011 -> 2e-05        # weight = torch.tensor(1).to('cuda')
+
+        score = grad_log_p(x, t - step_size, beta=beta)
+        term_1 = -(-2 * current_x * torch.exp(-h)) / weight
+        term_2 = -(2 * x * torch.exp(-2 * h)) / weight
+
+        # Calculate Score
+        grad = score + term_1 + term_2
+        # grad = score
+
+        # noise = torch.randn_like(x).to('cuda')
+        # inner_step_size = torch.tensor(weight/100) * mcmc_step_size_scale
+        # inner_step_size = torch.tensor(weight/100)
+        # x_mean = x + inner_step_size * grad
+        # x = x_mean + torch.sqrt(inner_step_size * 2) * noise
+
+
+        # 定义均值向量和协方巧矩阵
+
+        # 采样
+        noise = mvn.sample((x.size(0),))  # 生成样本
+        # x_std = x_std_v_std[:,0][:,None].to('cuda')
+        # v_std = x_std_v_std[:,1][:,None].to('cuda')
+        # noise_x = torch.randn_like(x).to('cuda') * x_std
+        # noise_v = torch.randn_like(x).to('cuda') * v_std
+        noise_x = noise[:, :d].to('cuda')
+        noise_v = noise[:, d:].to('cuda')
+        x = (x
+             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * v
+             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
+             + noise_x
+             )
+        v = (torch.exp(-gamma * tau) * v
+             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
+             + noise_v
+             )
+
+        # inner_step_size = mcmc_step_size_scale
+        # gamma = 30
+        # v = (v - gamma * v * inner_step_size
+        #      + grad * inner_step_size
+        #      + torch.sqrt(torch.tensor(2 * gamma * inner_step_size)) * torch.randn_like(v))
+        # x = x + v * inner_step_size
+
+    return x
 def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor(0.01),
                                             mcmc_steps=20, mcmc_step_size_scale=1, init=None, weight_scale=1):
     # record current x
@@ -304,10 +407,100 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
 
         # now decide whether to accept this x_new
         accept_ratio = torch.exp(
-            -get_energy(x_new,t-step_size)
+            - get_energy(x_new,t-step_size)
             + get_energy(x, t-step_size)
-            + (torch.norm(x_new - x + inner_step_size * get_grad(x, t-step_size), p=2, dim=-1) ** 2)/ (4 * inner_step_size)
-            -  (torch.norm(x - x_new + inner_step_size * get_grad(x_new, t-step_size), p=2, dim=-1) ** 2) ** 2 / (4 * inner_step_size)
+            + (torch.norm(x_new - x - inner_step_size * get_grad(x, t-step_size), p=2, dim=-1) ** 2)/ (4 * inner_step_size)
+            -  (torch.norm(x - x_new - inner_step_size * get_grad(x_new, t-step_size), p=2, dim=-1) ** 2) ** 2 / (4 * inner_step_size)
+        )
+        accept = torch.rand(x.size(0)).to('cuda') < accept_ratio
+        # x = torch.where(accept, x_new, x)
+        # print(accept.to(torch.int).sum() / x.shape[0])
+        x[accept] = x_new[accept]
+
+    return x
+
+def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=torch.tensor(0.01),
+                                            mcmc_steps=20, mcmc_step_size_scale=1, init=None, weight_scale=1):
+    # record current x
+    current_x = x
+    # scale step size to 0 ~ 1
+    h = torch.tensor(step_size / 1000).to('cuda')
+    # one step ddim as initial state for langevin mcmc
+    if init is not None:
+        if init == 'ddim':
+            x = reverse_ddim_step(x, t, step_size, beta)
+        elif init == 'ddpm':
+            x = reverse_ddpm_step(x, t, step_size, beta)
+        elif init == 'ddpm_drift':
+            x = reverse_ddpm_drift_step(x, t, step_size, beta)
+        else:
+            raise NotImplementedError
+
+            # avoid final redundant mcmc step
+    # if t - step_size < 1e-8:
+    #     return x
+
+    # Calculate Score Components
+    weight = 2 * (1 - torch.exp(-2 * h)) * weight_scale# 0.0011 -> 2e-05
+
+    inner_step_size = torch.tensor(weight / 10 * (h / 0.5) ** 1 ) * mcmc_step_size_scale * (1000/step_size) / 25
+
+    # langevin iteration
+    for _ in range(mcmc_steps):
+        def get_grad(x, t):
+            score = -grad_log_p(x, t, beta=beta)
+            term_1 = (-2 * current_x * torch.exp(-h)) / weight
+            term_2 = (2 * x * torch.exp(-2 * h)) / weight
+            return score + term_1 + term_2
+
+        def explicit_quadratic(x):
+            term_2 = torch.norm(current_x - x * torch.exp(-h), p=2, dim=-1) ** 2 / weight
+            return term_2
+
+        def esimated_energy_difference(x_new, x):
+            # estimate log_p(x_new) - log_p(x)
+            eps = 0.2
+            def h(i, delta_t):
+                if i == 1:
+                    return (torch.einsum( 'ij,ij->i', (grad_log_p((x_new - x) * (delta_t + eps) + x, t - step_size) , (x_new - x)))
+                            / eps)
+                else:
+                    return (h(i - 1, eps) - h(i - 1, 0)) / eps
+
+            estimated_energy_difference = 0
+
+            for i in range(1, 10):
+                import math
+                estimated_energy_difference += h(i, 0) / math.factorial(i)
+                # print(torch.mean(estimated_energy_difference))
+
+            return estimated_energy_difference
+
+        # def get_energy(x, t):
+        #     energy = -log_p(x, t, beta=beta)
+        #     # term_2 = torch.square(current_x - x * torch.exp(-h)) / weight
+        #     term_2 = torch.norm(current_x - x * torch.exp(-h), p=2, dim=-1) ** 2 / weight
+        #     # term_2 = torch.square(current_x - x * torch.exp(-0.5 * beta * h)) / weight
+        #     return energy + term_2
+
+        # Calculate Score
+        grad = get_grad(x, t - step_size)
+        noise = torch.randn_like(x).to('cuda')
+
+        # update x (codes from langevin corrector for score sde)
+
+        x_mean = x - inner_step_size * grad
+        x_new = x_mean + torch.sqrt(inner_step_size * 2) * noise
+
+        # now decide whether to accept this x_new
+        accept_ratio = torch.exp(
+            # -get_energy(x_new,t-step_size)
+            # + get_energy(x, t-step_size)
+            + esimated_energy_difference(x_new, x)
+            - explicit_quadratic(x_new)
+            + explicit_quadratic(x)
+            + (torch.norm(x_new - x - inner_step_size * get_grad(x, t-step_size), p=2, dim=-1) ** 2)/ (4 * inner_step_size)
+            -  (torch.norm(x - x_new - inner_step_size * get_grad(x_new, t-step_size), p=2, dim=-1) ** 2) ** 2 / (4 * inner_step_size)
         )
         accept = torch.rand(x.size(0)).to('cuda') < accept_ratio
         # x = torch.where(accept, x_new, x)
@@ -318,7 +511,10 @@ def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor
 
 reverse_step_dict = {'DDPM': reverse_ddpm_step,
                      'Langevin': langevin_correction_alg1,
-                     'MALA': langevin_correction_with_rejection_alg1}
+                     'ULD': uld,
+                     'MALA': langevin_correction_with_rejection_alg1,
+                     'MALA_ES': langevin_correction_with_rejection_alg1_estimated,
+                     }
 
 
 def sample_gaussian_mixture(pis=pis, d=d, mus=mus, sigmas=sigmas, num_samples=50000):
@@ -348,4 +544,4 @@ def sample_gaussian_mixture(pis=pis, d=d, mus=mus, sigmas=sigmas, num_samples=50
 
 
 # Generate the samples
-y = sample_gaussian_mixture(pis, d, mus, sigmas, 50000)
+y = sample_gaussian_mixture(pis, d, mus, sigmas, ground_truth_num )
