@@ -1,4 +1,5 @@
 import torch
+
 import numpy as np
 import itertools
 from tqdm import tqdm
@@ -20,15 +21,16 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.3], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  np.linspace(0.1, 1, 10, endpoint=True), True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  np.linspace(1, 2, 10, endpoint=True), False
 
-reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.2], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(0.1, 1, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(1, 2, 10, endpoint=True), False
 
-reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.005], True
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.001, 0.01, 10, endpoint=True), False
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.0001, 0.001, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.0005], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.03], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.001, 0.01, 10, endpoint=True), False
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.0001, 0.001, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.00001, 0.0001, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
@@ -38,8 +40,8 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True
 
 total_steps = [5]
 # total_steps = [8]
-# mcmc_steps, vis  = list(range(20, 26 * 20, 20)), False
-mcmc_steps= [205]
+mcmc_steps, vis = list(range(20, 26 * 20, 20)), False
+# mcmc_steps= [205]
 # mcmc_steps= [525]
 # mcmc_step_sizes_scale = [0.5]
 # mcmc_step_sizes_scale = [1,2,3, 4, 5,6,7,8]

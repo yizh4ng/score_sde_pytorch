@@ -1,8 +1,10 @@
 import torch
 from torch.distributions import MultivariateNormal
 
-from mog_util.mog_high_dim_config import pis, mus, sigmas, grad_log_p_noise, log_p_noise, d, ground_truth_num
+from mog_util.mog_high_dim_config import pis, mus, sigmas, grad_log_p_noise, log_p_noise, d, ground_truth_num, synthetic_num
 
+grad_noise = torch.randn(d).to('cuda') * grad_log_p_noise
+p_noise = torch.randn(1).to('cuda') * log_p_noise
 
 def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     n_samples = x_t.shape[0]  # Number of samples in the batch
@@ -36,9 +38,10 @@ def grad_log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
     # Compute the gradient of the log probability
     grad_log_p = -weighted_sum / (p_x_t.unsqueeze(-1) + 1e-15)
     if grad_log_p_noise != 0:
-        noise_std = grad_log_p_noise * torch.abs(grad_log_p)
+        # noise_std = grad_log_p_noise * torch.abs(grad_log_p)
         # grad_log_p = grad_log_p + torch.ones_like(grad_log_p) * noise_std
-        grad_log_p = grad_log_p + torch.randn_like(grad_log_p) * noise_std
+        # grad_log_p = grad_log_p + torch.randn_like(grad_log_p) * noise_std
+        grad_log_p = grad_log_p + grad_log_p_noise
     return grad_log_p
 
 def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
@@ -71,9 +74,10 @@ def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
 
     if log_p_noise != 0:
         noise_std = log_p_noise * torch.abs(log_p_x_t)
-        log_p_x_t = log_p_x_t + torch.randn_like(log_p_x_t) * noise_std
+        # log_p_x_t = log_p_x_t + torch.randn_like(log_p_x_t) * noise_std
+        # log_p_x_t = log_p_x_t + noise[None, 0] * noise_std
         # log_p_x_t = log_p_x_t + torch.ones_like(log_p_x_t) * noise_std
-
+        log_p_x_t = log_p_x_t + log_p_noise
     return log_p_x_t
 
 def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
@@ -260,34 +264,25 @@ def uld(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_steps=20, mcmc_step_siz
     v = torch.randn_like(x).to('cuda')
 
     gamma = 50
-    tau = torch.tensor(mcmc_step_size_scale, dtype=torch.float)
-    # mean = torch.tensor([0.0, 0.0])  # 二元高斯的均值向量
-    # covariance = torch.tensor([[2 / gamma * (tau - 2 / gamma * (1 - torch.exp(-gamma * tau))) + 1 / (2 * gamma) * (
-    #             1 - torch.exp(-2 * gamma * tau)),
-    #                             1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau))],
-    #                            [1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau)),
-    #                             1 - torch.exp(-2 * gamma * tau)]])  # 二元高斯的协方巧矩阵
+    # tau = torch.tensor(mcmc_step_size_scale, dtype=torch.float)
     #
-    # # 创建多元高斯分布实例
-    # mvn = MultivariateNormal(mean, covariance)
-
-    var_x = 2 / gamma * (tau - 2 / gamma * (1 - torch.exp(-gamma * tau))) + 1 / (2 * gamma) * (
-                1 - torch.exp(-2 * gamma * tau))
-    var_v = 1 - torch.exp(-2 * gamma * tau)
-    cov_xv = 1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau))
-
-    # 构建完整的协方差矩阵
-    Sigma_xx = var_x * torch.eye(d)
-    Sigma_vv = var_v * torch.eye(d)
-    Sigma_xv = cov_xv * torch.eye(d)
-
-    # 构建 2d x 2d 协方差矩阵
-    top_row = torch.cat([Sigma_xx, Sigma_xv], dim=1)
-    bottom_row = torch.cat([Sigma_xv, Sigma_vv], dim=1)
-    cov_matrix = torch.cat([top_row, bottom_row], dim=0)
-
-    # 创建多元正态分布
-    mvn = MultivariateNormal(torch.zeros(2 * d), cov_matrix)
+    # var_x = 2 / gamma * (tau - 2 / gamma * (1 - torch.exp(-gamma * tau))) + 1 / (2 * gamma) * (
+    #             1 - torch.exp(-2 * gamma * tau))
+    # var_v = 1 - torch.exp(-2 * gamma * tau)
+    # cov_xv = 1 / gamma * (1 - 2 * torch.exp(-gamma * tau) + torch.exp(-2 * gamma * tau))
+    #
+    # # 构建完整的协方差矩阵
+    # Sigma_xx = var_x * torch.eye(d)
+    # Sigma_vv = var_v * torch.eye(d)
+    # Sigma_xv = cov_xv * torch.eye(d)
+    #
+    # # 构建 2d x 2d 协方差矩阵
+    # top_row = torch.cat([Sigma_xx, Sigma_xv], dim=1)
+    # bottom_row = torch.cat([Sigma_xv, Sigma_vv], dim=1)
+    # cov_matrix = torch.cat([top_row, bottom_row], dim=0)
+    #
+    # # 创建多元正态分布
+    # mvn = MultivariateNormal(torch.zeros(2 * d), cov_matrix)
 
     for _ in range(mcmc_steps):
         # Calculate Score Components
@@ -299,41 +294,27 @@ def uld(x, t, step_size=1, beta=torch.tensor(0.01), mcmc_steps=20, mcmc_step_siz
 
         # Calculate Score
         grad = score + term_1 + term_2
-        # grad = score
-
-        # noise = torch.randn_like(x).to('cuda')
-        # inner_step_size = torch.tensor(weight/100) * mcmc_step_size_scale
-        # inner_step_size = torch.tensor(weight/100)
-        # x_mean = x + inner_step_size * grad
-        # x = x_mean + torch.sqrt(inner_step_size * 2) * noise
-
-
-        # 定义均值向量和协方巧矩阵
 
         # 采样
-        noise = mvn.sample((x.size(0),))  # 生成样本
-        # x_std = x_std_v_std[:,0][:,None].to('cuda')
-        # v_std = x_std_v_std[:,1][:,None].to('cuda')
-        # noise_x = torch.randn_like(x).to('cuda') * x_std
-        # noise_v = torch.randn_like(x).to('cuda') * v_std
-        noise_x = noise[:, :d].to('cuda')
-        noise_v = noise[:, d:].to('cuda')
-        x = (x
-             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * v
-             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
-             + noise_x
-             )
-        v = (torch.exp(-gamma * tau) * v
-             + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
-             + noise_v
-             )
+        # noise = mvn.sample((x.size(0),))  # 生成样本
+        # noise_x = noise[:, :d].to('cuda')
+        # noise_v = noise[:, d:].to('cuda')
+        # x = (x
+        #      + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * v
+        #      + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
+        #      + noise_x
+        #      )
+        # v = (torch.exp(-gamma * tau) * v
+        #      + gamma ** -1 * (1 - torch.exp(-gamma * tau)) * grad
+        #      + noise_v
+        #      )
 
-        # inner_step_size = mcmc_step_size_scale
-        # gamma = 30
-        # v = (v - gamma * v * inner_step_size
-        #      + grad * inner_step_size
-        #      + torch.sqrt(torch.tensor(2 * gamma * inner_step_size)) * torch.randn_like(v))
-        # x = x + v * inner_step_size
+        inner_step_size = mcmc_step_size_scale
+        gamma = 30
+        v = (v - gamma * v * inner_step_size
+             + grad * inner_step_size
+             + torch.sqrt(torch.tensor(2 * gamma * inner_step_size)) * torch.randn_like(v))
+        x = x + v * inner_step_size
 
     return x
 def langevin_correction_with_rejection_alg1(x, t, step_size=1, beta=torch.tensor(0.01),
@@ -441,7 +422,7 @@ def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=to
     #     return x
 
     # Calculate Score Components
-    weight = 2 * (1 - torch.exp(-2 * h)) * weight_scale# 0.0011 -> 2e-05
+    weight = 2 * (1 - torch.exp(-2 * h)) * 1# 0.0011 -> 2e-05
 
     inner_step_size = torch.tensor(weight / 10 * (h / 0.5) ** 1 ) * mcmc_step_size_scale * (1000/step_size) / 25
 
@@ -457,7 +438,7 @@ def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=to
             term_2 = torch.norm(current_x - x * torch.exp(-h), p=2, dim=-1) ** 2 / weight
             return term_2
 
-        def esimated_energy_difference(x_new, x):
+        def esimated_energy_difference_1(x_new, x):
             # estimate log_p(x_new) - log_p(x)
             eps = 0.2
             def h(i, delta_t):
@@ -469,19 +450,34 @@ def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=to
 
             estimated_energy_difference = 0
 
-            for i in range(1, 10):
+            for i in range(1, 4):
                 import math
                 estimated_energy_difference += h(i, 0) / math.factorial(i)
                 # print(torch.mean(estimated_energy_difference))
 
             return estimated_energy_difference
 
-        # def get_energy(x, t):
-        #     energy = -log_p(x, t, beta=beta)
-        #     # term_2 = torch.square(current_x - x * torch.exp(-h)) / weight
-        #     term_2 = torch.norm(current_x - x * torch.exp(-h), p=2, dim=-1) ** 2 / weight
-        #     # term_2 = torch.square(current_x - x * torch.exp(-0.5 * beta * h)) / weight
-        #     return energy + term_2
+        def esimated_energy_difference(x_new, x):
+            # estimate log_p(x_new) - log_p(x)
+            eps = 0.005
+            mid_point = 0.5
+            def h(i, delta_t):
+                if i == 1:
+                    return torch.einsum('ij,ij->i', (grad_log_p((x_new - x) * mid_point + x, t - step_size), (x_new - x)))
+                elif i == 2:
+                    f = lambda _delta_t, _eps: torch.einsum('ij,ij->i', (grad_log_p((x_new - x) * (mid_point + _delta_t + _eps) + x, t - step_size), (x_new - x)))
+                    return (f(delta_t, eps) - f(delta_t, -eps))/ (2 * eps)
+                elif i > 2:
+                    return (h(i - 1, eps) - h(i - 1, -eps)) / (2 * eps)
+
+                    # return (h(i - 1, eps) - h(i - 1, 0)) / eps
+
+            estimated_energy_difference = 0
+
+            for i in range(1, 3):
+                import math
+                estimated_energy_difference += h(i, 0) / math.factorial(i)
+            return estimated_energy_difference
 
         # Calculate Score
         grad = get_grad(x, t - step_size)

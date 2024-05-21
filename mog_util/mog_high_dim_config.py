@@ -275,8 +275,8 @@ def mog_high_dim_config6_noise():
     mean_off_set = torch.ones((k, d)).to('cuda') * 0 # 对分布进行偏移
     pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
     pis = pis / pis.sum()
-    grad_log_p_noise = 0.05
-    log_p_noise = 0.05
+    grad_log_p_noise = 0.01
+    log_p_noise = 0.001
 
 
     # 初始化存储参数的张量
@@ -309,5 +309,7 @@ def mog_high_dim_config6_noise():
         sigmas[i] = torch.diag(diagonal)
     return mus, sigmas,d,  pis, grad_log_p_noise, log_p_noise
 
-mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2_noise()
+# mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2_noise()
+mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2()
 ground_truth_num = 500000
+synthetic_num = 5000
