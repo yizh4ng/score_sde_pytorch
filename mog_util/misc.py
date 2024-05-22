@@ -87,9 +87,13 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
     if 'MALA' in title:
         c = 'red'
         label = 'MALA'
+    if 'MALA_ES' in title:
+        c = 'brown'
+        label = 'MALA_ES'
     if 'Langevin' in title:
+        title = 'ULA'
         c = 'orange'
-        label = 'Langevin'
+        label = 'ULA'
     if 'ULD' in title:
         c = 'green'
         label = 'ULD'
@@ -99,7 +103,7 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
         _data = data.cpu().numpy()
         np.random.shuffle(_data)
         plt.figure(figsize=(6, 6))  # Set the figure size
-        scatter = plt.scatter(_data[:, 0], _data[:, 1], alpha=alpha,
+        scatter = plt.scatter(_data[:50000, 0], _data[:50000, 1], alpha=alpha,
                               # cmap='viridis',
                               c=c,
                               s=10)  # s is the size of points
@@ -142,11 +146,11 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
             pdf += weight * stats.norm.pdf(x, mean, std)
         plt.plot(x, pdf, label='Ground Truth', color='grey', linewidth=3)
 
-        plt.xlabel('Bins')
+        plt.xlabel('Dimension 2')
         plt.ylabel('Probability')
         # plt.title(f'kl div: {mc:.6f}, step szie: {step_size}')
         plt.title(title)
-        plt.legend()
+        plt.legend(loc='upper right')
         # plt.savefig(f'./test/{step_size}_sde.png')
         plt.savefig(f'{title}_dim.png', dpi=600, bbox_inches='tight')
         # plt.show()

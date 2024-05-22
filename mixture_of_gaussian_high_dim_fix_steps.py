@@ -35,13 +35,12 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.3], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
 reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.2], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
 total_steps = [5]
 # total_steps = [8]
-mcmc_steps, vis = list(range(20, 26 * 20, 20)), False
-# mcmc_steps= [205]
+# mcmc_steps, vis = list(range(20, 26 * 20, 20)), False
+mcmc_steps= [205]
 # mcmc_steps= [525]
 # mcmc_step_sizes_scale = [0.5]
 # mcmc_step_sizes_scale = [1,2,3, 4, 5,6,7,8]
@@ -61,7 +60,7 @@ df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
     reverse_fuc = reverse_step_dict[reverse_fuc]
-    x = torch.randn([50000, d]).to('cuda')
+    x = torch.randn([500000, d]).to('cuda')
     pbar = tqdm(total=1000, leave=False)
     real_mcmc_step = int(mcmc_step / total_step)
     for t in reversed(np.append(np.linspace(0, 1000, total_step, endpoint=False)[1:], 1000)):

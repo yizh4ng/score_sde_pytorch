@@ -27,8 +27,8 @@ weight_scale = [1]
 reverse_fucs = ['DDPM']
 # total_steps = [40, 100, 200, 500]
 # total_steps = [42, 105, 210, 525]
-total_steps, vis = list(range(25, 525, 20)), False
-# total_steps, vis = [205], True
+# total_steps, vis = list(range(25, 525, 20)), False
+total_steps, vis = [205], True
 mcmc_steps  = [None]
 mcmc_step_sizes_scale = [None]
 inits = [None]
@@ -46,7 +46,7 @@ df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
     reverse_fuc = reverse_step_dict[reverse_fuc]
-    x = torch.randn([50000, d]).to('cuda')
+    x = torch.randn([500000, d]).to('cuda')
     pbar = tqdm(total=1000, leave=False)
     for t in reversed(np.append(np.linspace(0, 1000, total_step, endpoint=False)[1:], 1000)):
     # for t in reversed(linespace(0, 1000, total_step)[1:]):
