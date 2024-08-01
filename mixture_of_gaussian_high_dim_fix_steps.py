@@ -27,14 +27,14 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.3], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(1, 2, 10, endpoint=True), False
 
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.0005], True
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.03], True
+reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.03], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.001, 0.01, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.0001, 0.001, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.00001, 0.0001, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['uld'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
-reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
 total_steps = [5]
@@ -63,12 +63,20 @@ for parameters in parameters_combinations:
     x = torch.randn([500000, d]).to('cuda')
     pbar = tqdm(total=1000, leave=False)
     real_mcmc_step = int(mcmc_step / total_step)
+    import time
+    start_time = time.perf_counter()
     for t in reversed(np.append(np.linspace(0, 1000, total_step, endpoint=False)[1:], 1000)):
     # for t in reversed(linespace(0, 1000, total_step)[1:]):
         x = reverse_fuc(x, t, step_size=1000/total_step, mcmc_steps=real_mcmc_step,
                     mcmc_step_size_scale=mcmc_step_size_scale, init=init, weight_scale=weight_scale)
         pbar.update(1000/total_step)
     pbar.close()
+    # 记录结束时间
+    end_time = time.perf_counter()
+
+    # 计算并打印运行时间
+    elapsed_time = end_time - start_time
+    print(f"The code took {elapsed_time} seconds to execute.")
 
     if vis:
         # visualize(x, f'{parameters[0]}_{mcmc_step_size_scale}')
