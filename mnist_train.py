@@ -126,12 +126,12 @@ def calc_loss(score_network: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
 import time
 opt = torch.optim.Adam(score_network.parameters(), lr=3e-4)
 dloader = torch.utils.data.DataLoader(mnist_dset, batch_size=64, shuffle=True)
-device = torch.device('cuda:0')  # change this if you don't have a gpu
+device = torch.device('cuda:7')  # change this if you don't have a gpu
 score_network = score_network.to(device)
 
 torch.save(score_network.state_dict(), f'./mnist.pth')
 t0 = time.time()
-for i_epoch in range(400):
+for i_epoch in range(1200):
     total_loss = 0
     for data, _ in dloader:  # we don't need the data class
         data = data.reshape(data.shape[0], -1).to(device)
