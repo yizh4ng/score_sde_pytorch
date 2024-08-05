@@ -17,10 +17,14 @@ def estimate_marginal_accuracy(samples_mu, samples_pi, num_bins=50):
         #                       max=float(samples_mu[:, i].max()))
         # pi_hist = torch.histc(samples_pi[:, i], bins=num_bins, min=float(samples_pi[:, i].min()),
         #                       max=float(samples_pi[:, i].max()))
-        mu_hist = torch.histc(samples_mu[:, i], bins=num_bins, min=-5.0,
-                              max=5.0)
-        pi_hist = torch.histc(samples_pi[:, i], bins=num_bins, min=-5.0,
-                              max=5.0)
+        # mu_hist = torch.histc(samples_mu[:, i], bins=num_bins, min=-5.0,
+        #                       max=5.0)
+        # pi_hist = torch.histc(samples_pi[:, i], bins=num_bins, min=-5.0,
+        #                       max=5.0)
+        mu_hist = torch.histc(samples_mu[:, i], bins=num_bins, min=-1.5,
+                              max=1.5)
+        pi_hist = torch.histc(samples_pi[:, i], bins=num_bins, min=-1.5,
+                              max=1.5)
 
         # 归一化直方图
         mu_hist /= mu_hist.sum()
@@ -97,6 +101,12 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
     if 'ULD' in title:
         c = 'green'
         label = 'ULD'
+    if 'ALD' in title:
+        c = 'purple'
+        label = 'ALD'
+    if 'DDIM' in title:
+        c = 'black'
+        label = 'DDIM'
 
     if 'cluster' in mode:
         import matplotlib.pyplot as plt
@@ -115,7 +125,7 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
         plt.grid(True)
         plt.tight_layout()
         plt.savefig(f'{title}.png', dpi=600, bbox_inches='tight')
-        # plt.show()
+        plt.show()
         plt.close()
     if 'hist' in mode:
         # data = data.cpu().numpy()
@@ -153,5 +163,5 @@ def visualize_cluster(data, ground_truth, title, mode=['hist', 'cluster'], alpha
         plt.legend(loc='upper right')
         # plt.savefig(f'./test/{step_size}_sde.png')
         plt.savefig(f'{title}_dim.png', dpi=600, bbox_inches='tight')
-        # plt.show()
+        plt.show()
         plt.close()

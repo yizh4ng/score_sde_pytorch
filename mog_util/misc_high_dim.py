@@ -19,8 +19,11 @@ def estimate_marginal_accuracy(samples_mu, samples_pi, num_bins=50):
         #                       max=float(samples_pi[:, i].max()))
         # _min = torch.min(torch.cat((samples_mu[:, i], samples_pi[:,i]))).item()
         # _max = torch.max(torch.cat((samples_mu[:, i], samples_pi[:,i]))).item()
-        _min = -5
-        _max = 5
+
+        # _min = -5
+        # _max = 5
+        _min = -1.5
+        _max = 1.5
         mu_hist = torch.histc(samples_mu[:, i], bins=num_bins, min=_min,
                               max=_max)
         pi_hist = torch.histc(samples_pi[:, i], bins=num_bins, min=_min,

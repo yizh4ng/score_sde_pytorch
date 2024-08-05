@@ -80,28 +80,36 @@ def log_p(x_t, t, beta=torch.tensor(0.01).to('cuda')):
         log_p_x_t = log_p_x_t + log_p_noise
     return log_p_x_t
 
-def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda')):
+def reverse_sde_step(x, t, step_size=1, beta=torch.tensor(0.01).to('cuda'), **kwargs):
     return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size + torch.sqrt(beta * step_size) * torch.randn_like(x)
 
-def reverse_ode_step(x, t, step_size=1, beta=torch.tensor(0.01)):
-    return x + (0.5 * beta * x + beta * grad_log_p(x, t)) * step_size
-def reverse_ddim_step(x, t, step_size=1, beta=torch.tensor(0.01), eta=0):
+def reverse_ode_step(x, t, step_size=1, beta=torch.tensor(0.01), **kwargs):
+    return x + (0.5 * beta * x + 0.5 * beta * grad_log_p(x, t)) * step_size
+def reverse_ddim_step(x, t, step_size=1, beta=torch.tensor(0.01), eta=0, **kwargs):
     alpha = 1 - beta
     alpha_cumprod = alpha ** t
     alpha_cumrpod_prev = alpha ** (t - step_size)
 
     predicted_noise = -grad_log_p(x, t) * torch.sqrt(1 -alpha_cumprod)
 
-    epsilon_t = torch.randn_like(x)
-    sigma_t = eta * torch.sqrt((1 - alpha_cumrpod_prev) / (1 - alpha_cumprod) * (1 - alpha_cumprod / alpha_cumrpod_prev))
-
-    x = (
-            torch.sqrt(alpha_cumrpod_prev / alpha_cumprod) * x +
-            (torch.sqrt(1 - alpha_cumrpod_prev - sigma_t ** 2) - torch.sqrt(
-                (alpha_cumrpod_prev * (1 - alpha_cumprod)) / alpha_cumprod)) * predicted_noise +
-            sigma_t * epsilon_t
-    )
+    alpha_t = alpha_cumprod
+    alpha_prev = alpha_cumrpod_prev
+    x0_t = (x - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
+    c1 = eta * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+    c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
+    x = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise + c1 * torch.randn_like(x)
     return x
+
+    # epsilon_t = torch.randn_like(x)
+    # sigma_t = eta * torch.sqrt((1 - alpha_cumrpod_prev) / (1 - alpha_cumprod) * (1 - alpha_cumprod / alpha_cumrpod_prev))
+    #
+    # x = (
+    #         torch.sqrt(alpha_cumrpod_prev / alpha_cumprod) * x +
+    #         (torch.sqrt(1 - alpha_cumrpod_prev - sigma_t ** 2) - torch.sqrt(
+    #             (alpha_cumrpod_prev * (1 - alpha_cumprod)) / alpha_cumprod)) * predicted_noise +
+    #         sigma_t * epsilon_t
+    # )
+    # return x
 
 def reverse_ddpm_drift_step(x, t, step_size=1, beta=torch.tensor(0.01), eta=1):
     alpha = 1 - beta
@@ -122,15 +130,16 @@ def reverse_ddpm_step(x, t, step_size=1, beta=torch.tensor(0.01), **kwargs):
     x = reverse_ddim_step(x, t, step_size, beta, eta=1)
     return x
 
-def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
+def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01),
+                        mcmc_steps=20, mcmc_step_size_scale=1, **kwargs):
     current_x = x
     # scale step size to 0 ~ 1
     h = torch.tensor(step_size / 1000).to('cuda')
     # one step ddim as initial state for langevin mcmc
-    # x = reverse_ddim_step(x, t, step_size, beta)
+    x = reverse_ddpm_step(x, t, step_size, beta)
 
     # set 10 step langevin iteration
-    for _ in range(10):
+    for _ in range(mcmc_steps):
         # Calculate Score Components
         score = grad_log_p(x, t - step_size, beta=beta)
 
@@ -140,7 +149,7 @@ def langevin_correction(x, t, step_size=1, beta=torch.tensor(0.01)):
         noise = torch.randn_like(x).to('cuda')
 
         # update x (codes from langevin corrector for score sde)
-        inner_step_size = torch.tensor(0.5)
+        inner_step_size = torch.tensor(0.5) * mcmc_step_size_scale
         x_mean = x + inner_step_size * grad
         x = x_mean + torch.sqrt(inner_step_size * 2) * noise
     return x
@@ -460,7 +469,8 @@ def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=to
         def esimated_energy_difference(x_new, x):
             # estimate log_p(x_new) - log_p(x)
             eps = 0.005
-            mid_point = 0.5
+            # eps = 0.00001
+            mid_point = 0.0
             def h(i, delta_t):
                 if i == 1:
                     return torch.einsum('ij,ij->i', (grad_log_p((x_new - x) * mid_point + x, t - step_size), (x_new - x)))
@@ -506,7 +516,11 @@ def langevin_correction_with_rejection_alg1_estimated(x, t, step_size=1, beta=to
     return x
 
 reverse_step_dict = {'DDPM': reverse_ddpm_step,
+                     'DDIM': reverse_ddim_step,
+                     'SDE':reverse_sde_step,
+                     'ODE':reverse_ode_step,
                      'Langevin': langevin_correction_alg1,
+                     'ALD': langevin_correction,
                      'ULD': uld,
                      'MALA': langevin_correction_with_rejection_alg1,
                      'MALA_ES': langevin_correction_with_rejection_alg1_estimated,

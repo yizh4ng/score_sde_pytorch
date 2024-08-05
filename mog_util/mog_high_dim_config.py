@@ -309,7 +309,72 @@ def mog_high_dim_config6_noise():
         sigmas[i] = torch.diag(diagonal)
     return mus, sigmas,d,  pis, grad_log_p_noise, log_p_noise
 
+def mog_chessboard_high_dim():
+    d = 10
+    grid_size = 4
+    grad_log_p_noise, log_p_noise = 0, 0
+
+    index = 0
+    mus = []
+    cell_length = 1 / grid_size
+    for i in range(grid_size):
+        for j in range(grid_size):
+            if (i + j) % 2 == 0:  # Black cell condition
+                # Calculate the origin of the cell
+                mean = torch.tensor((0.,) * d).to('cuda')
+                origin_x = i * cell_length
+                origin_y = j * cell_length
+                mean[:2] = torch.tensor([origin_x, origin_y]).to('cuda')
+                mus.append(mean)
+                index += 1
+    mus = torch.stack(mus, dim=0)
+    mus = mus - torch.mean(mus, dim=0, keepdim=True)
+
+    k = len(mus)
+    pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+    sigmas = torch.zeros((k, d, d)).to('cuda')
+
+    sigma_scale = 0.007
+    for i in range(k):
+        diagonal = torch.ones(d).to('cuda') * sigma_scale
+        sigmas[i] = torch.diag(diagonal)
+
+    return mus, sigmas, d,  pis, grad_log_p_noise, log_p_noise
+
+def spiral():
+    d = 10
+    k = 16
+    mus = torch.zeros((k, d)).to('cuda')
+    grad_log_p_noise, log_p_noise = 0, 0
+    num_turns = 2
+    max_radius = 1
+
+    # 生成等间距的角度值，覆盖多个360度圈
+    angles = torch.linspace(0, num_turns * 2 * torch.pi, steps=k).to('cuda')
+
+    # 半径随角度增大而线性增大
+    radii = torch.linspace(0, max_radius, steps=k).to('cuda')
+
+    # 将极坐标转换为笛卡尔坐标
+    x = radii * torch.cos(angles)
+    y = radii * torch.sin(angles)
+    mus[:, 0] = x
+    mus[:, 1] = y
+
+    k = len(mus)
+    pis = torch.ones(k).to('cuda') / k  # 每个高斯的权重
+    sigmas = torch.zeros((k, d, d)).to('cuda')
+
+    sigma_scale = 0.007
+    for i in range(k):
+        diagonal = torch.ones(d).to('cuda') * sigma_scale
+        sigmas[i] = torch.diag(diagonal)
+
+    return mus, sigmas, d,  pis, grad_log_p_noise, log_p_noise
+
 # mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2_noise()
-mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2()
-ground_truth_num = 500000
+# mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2()
+# mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_chessboard_high_dim()
+mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = spiral()
+ground_truth_num = 50000
 synthetic_num = 5000

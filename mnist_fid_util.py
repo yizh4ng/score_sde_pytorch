@@ -167,7 +167,7 @@ def evaluate_fid_score(images1, images2, dim=64, batch_size=50):
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dim]
 
-    model = InceptionV3([block_idx]).to(device)
+    model = InceptionV3([block_idx], resize_input=True, normalize_input=True).to(device)
 
     # if images1.shape[-1] == 1:
     #     images1 = np.concatenate([images1, images1, images1], axis=-1)
