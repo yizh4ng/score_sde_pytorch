@@ -6,7 +6,7 @@ from tqdm import tqdm
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-from mog_util.misc import visualize_cluster
+from mog_util.misc import visualize_cluster, calculate_wasserstein_distance
 from mog_util.misc_high_dim import estimate_marginal_accuracy
 from mog_util.reverse_step_high_dim import *
 import warnings
@@ -15,8 +15,8 @@ warnings.filterwarnings("ignore", message="clamping frac")
 
 
 # reverse_fucs = ['Langevin', 'MALA']
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.2], True
-reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.1], True # sprial
+reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.1], True # sprial
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.8], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  [0.4], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.3], True
@@ -29,7 +29,7 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.1], True # sprial
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA'],  np.linspace(1, 2, 10, endpoint=True), False
 
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.0005], True
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.03], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.03], True # sprial
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  [0.05], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.01, 0.1, 10, endpoint=True), False
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ULD'],  np.linspace(0.001, 0.01, 10, endpoint=True), False
@@ -39,7 +39,7 @@ reverse_fucs, mcmc_step_sizes_scale, vis = ['Langevin'],  [0.1], True # sprial
 
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ALD'],  [0.0005], True # chessboard
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['ALD'],  [0.0001], True # spiral
-# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True
+# reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.2], True # spiral
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  [0.4], True
 # reverse_fucs, mcmc_step_sizes_scale, vis = ['MALA_ES'],  np.linspace(0.1, 1, 10, endpoint=True), False
 
@@ -71,7 +71,7 @@ df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
     reverse_fuc = reverse_step_dict[reverse_fuc]
-    x = torch.randn([50000, d]).to('cuda')
+    x = torch.randn([5000, d]).to('cuda')
     pbar = tqdm(total=1000, leave=False)
     real_mcmc_step = int(mcmc_step / total_step)
     import time
@@ -94,7 +94,8 @@ for parameters in parameters_combinations:
         visualize(x, y, f'{parameters[0]}')
 
     # mc = estimate_marginal_accuracy(y, x, num_bins=200)
-    mc = estimate_marginal_accuracy(y, x, num_bins=10) # spiral
+    # mc = estimate_marginal_accuracy(y, x, num_bins=10) # spiral
+    mc = calculate_wasserstein_distance(x,y)
 
 
     if parameters[0] == 'DDPM':

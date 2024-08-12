@@ -89,7 +89,7 @@ class ScoreNetwork0(torch.nn.Module):
         return signal
 
 score_network = ScoreNetwork0()
-device = torch.device('cuda:0')  # change this if you don't have a gpu
+device = torch.device('cuda:5')  # change this if you don't have a gpu
 score_network = score_network.to(device)
 
 score_network.load_state_dict(torch.load(f'./mnist_better.pth'))
@@ -103,9 +103,9 @@ def generate_samples(score_network: torch.nn.Module, nsamples: int) -> torch.Ten
     device = next(score_network.parameters()).device
     x_t = torch.randn((nsamples, 28 * 28), device=device)  # (nsamples, nch)
 
-    time_pts = torch.linspace(1, 0, 10, device=device)  # (ntime_pts,)
+    time_pts = torch.linspace(1, 0, 1000, device=device)  # (ntime_pts,)
     beta = lambda t: 0.1 + (20 - 0.1) * t
-    # for i in range(len(time_pts)-1):
+    for i in range(len(time_pts)-1):
         # t = time_pts[i]
         # dt = time_pts[i + 1] - t
         # fxt = -0.5 * beta(t) * x_t
@@ -116,12 +116,13 @@ def generate_samples(score_network: torch.nn.Module, nsamples: int) -> torch.Ten
         # x_t = x_t + drift * dt + diffusion * torch.randn_like(x_t) * torch.abs(dt) ** 0.5
 
         # reverse sde # 25.95
-        # t = time_pts[i].unsqueeze(-1)
-        # dt = time_pts[i + 1] - t
-        # t = t.expand(x_t.shape[0], 1)
-        # drift, diffusion = rsde.sde(x_t, t)
-        # # euler-maruyama step
-        # x_t = x_t + drift * dt + diffusion * torch.randn_like(x_t) * torch.abs(dt) ** 0.5
+        if i < 400: continue
+        t = time_pts[i].unsqueeze(-1)
+        dt = time_pts[i + 1] - t
+        t = t.expand(x_t.shape[0], 1)
+        drift, diffusion = rsde.sde(x_t, t)
+        # euler-maruyama step
+        x_t = x_t + drift * dt + diffusion * torch.randn_like(x_t) * torch.abs(dt) ** 0.5
 
 
         # ddim or ddpm # 20.4 21.29
@@ -159,102 +160,103 @@ def generate_samples(score_network: torch.nn.Module, nsamples: int) -> torch.Ten
         #         x_t = x_mean + noise * torch.sqrt(step_size * 2)
 
     ## rtk uld
-    # # timesteps = [600, 700, 800, 900, 920, 940, 960, 980, 999]
-    time_pts = torch.linspace(1, 0, 1000, device=device)  # (ntime_pts,)
-    # timesteps = [100, 200, 300, 400, 500, 600, 700, 800, 830, 860, 900, 920, 940, 960, 980, 999]
-    # timesteps = [100, 200, 300, 400, 500, 600, 700, 800,  900,  999]
-    # timesteps = [300, 600, 700, 800, 900, 920, 940, 960, 980, 999]
-    # timesteps = [100, 300, 600,  800, 850, 900, 920, 940, 960, 980, 999]
-    # timesteps = [100, 600, 700, 800, 900, 920, 940, 950, 960, 970, 980, 990, 999]
-    # timesteps = [100, 300, 600, 700, 800, 900, 920, 940, 960, 980, 999]
-    # timesteps.insert(0, 0)
-    import numpy as np
-    timesteps = np.linspace(0, 999, 5, endpoint=True).astype(np.int64)
-    weight_scale = 1
-    for index, i in enumerate(timesteps[:-1]):
-        current_x = x_t
-
-        sde = sde
-        t = time_pts[i]
-        t_prev = time_pts[timesteps[index + 1]]
-        h = t-t_prev
-        timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
-        timestep_next = ((t-h) * (sde.N - 1) / sde.T).int().to(x_t.device) # same exact thing as  timestep - 1
-        alpha_t = sde.alphas_cumprod.to(x_t.device)[timestep]
-        alpha_prev = sde.alphas_cumprod.to(x_t.device)[timestep_next]
-        t = t.expand(x_t.shape[0], 1)
-        predicted_noise = -score_network(x_t, t).detach() * torch.sqrt(1 -alpha_t)
-        x0_t = (x_t - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
-        c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
-        c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
-        x_t = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise + c1 * torch.randn_like(x_t)
-        if index == (len(timesteps[:-1]) - 1): return x_t
-
-        # sde = VPSDE()
-        # rsde = sde.reverse(score_network, probability_flow=True)
-        # t = time_pts[timesteps[index]]
-        # t_prev = time_pts[timesteps[index + 1]]
-        # h = t-t_prev
-        # dt = -h
-        # t = t.expand(x_t.shape[0], 1)
-        # drift, diffusion = rsde.sde(x_t, t)
-        # # euler-maruyama step
-        # x_t = x_t + drift * dt + diffusion * torch.randn_like(x_t) * torch.abs(dt) ** 0.5
-
-
-        # beta = sde.discrete_betas.to(t.device)[timestep]
-        # weight = 4 * beta * h # 0.0011 -> 2e-05
-        # _beta = 0.5* (beta(1-t_prev) + beta(1-t))
-        _beta = beta(1-t_prev)
-        # _beta = 2
-        weight = 2 * (1 - torch.exp(-2 * _beta * h))
-        # weight = 4 * h
-        std = sde.marginal_prob(x_t, t)[1]
-        # ula
-        for j in range(1):
-                t = time_pts[i]
-                timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
-                alpha = sde.alphas[timestep]
-
-                t = t.expand(x_t.shape[0], 1)
-                grad = score_network(x_t, t).detach() / std
-                term_1 = -(-2 * current_x * torch.exp(-h * _beta)) / weight
-                term_2 = -(2 * x_t * torch.exp(-2 * h * _beta)) / weight
-                grad = grad + term_1 + term_2
-
-                noise = torch.randn_like(x_t)
-                # step_size = torch.tensor([5e-6]).to(device)
-                step_size = (0.2 * std) ** 2 * 2 * alpha * 0.1#* weight * 1
-                # step_size = torch.sqrt((0.2 * std) ** 2 * 2 * alpha * weight/200)
-                # step_size = weight /  2000
-                # step_size = torch.tensor(weight/100)
-                x_mean = x_t + step_size * grad
-                x_t = x_mean + noise * torch.sqrt(step_size * 2)
-        # uld
-        # v = torch.randn_like(x_t).to(device)
-        # for j in range(20):
-        #     t = time_pts[i]
-        #     timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
-        #     alpha = sde.alphas[timestep]
-        #
-        #     std = sde.marginal_prob(x_t, t)[1]
-        #     t = t.expand(x_t.shape[0], 1)
-        #     grad = score_network(x_t, t).detach() / std
-        #     term_1 = -(-2 * current_x * torch.exp(-h * _beta)) / weight
-        #     term_2 = -(2 * x_t * torch.exp(-2 * h * _beta)) / weight
-        #     grad = grad + term_1 + term_2
-        #
-        #     # inner_step_size = torch.tensor([5e-4]).to(device)
-        #     inner_step_size = (0.2 * std) ** 2 * 2 * alpha * weight
-        #     # inner_step_size = (0.2 * std) ** 2 * 2 * alpha
-        #     # inner_step_size = weight / 200
-        #     # step_size = torch.tensor(weight/100)
-        #
-        #     gamma =  0.1
-        #     x_t = x_t + v * inner_step_size
-        #     v = (v - gamma * v * inner_step_size
-        #          + grad * inner_step_size
-        #          + torch.sqrt(torch.tensor(2 * gamma * inner_step_size)) * torch.randn_like(v))
+    # # # timesteps = [600, 700, 800, 900, 920, 940, 960, 980, 999]
+    # time_pts = torch.linspace(1, 0, 1000, device=device)  # (ntime_pts,)
+    # # timesteps = [100, 200, 300, 400, 500, 600, 700, 800, 830, 860, 900, 920, 940, 960, 980, 999]
+    # # timesteps = [100, 200, 300, 400, 500, 600, 700, 800,  900,  999]
+    # # timesteps = [300, 600, 700, 800, 900, 920, 940, 960, 980, 999]
+    # # timesteps = [100, 300, 600,  800, 850, 900, 920, 940, 960, 980, 999]
+    # # timesteps = [100, 600, 700, 800, 900, 920, 940, 950, 960, 970, 980, 990, 999]
+    # # timesteps = [100, 300, 600, 700, 800, 900, 920, 940, 960, 980, 999]
+    # # timesteps.insert(0, 0)
+    # import numpy as np
+    # timesteps = np.linspace(0, 999, 10, endpoint=True).astype(np.int64)
+    # weight_scale = 1
+    # for index, i in enumerate(timesteps[:-1]):
+    #     current_x = x_t
+    #
+    #     sde = sde
+    #     t = time_pts[i]
+    #     t_prev = time_pts[timesteps[index + 1]]
+    #     h = t-t_prev
+    #     timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
+    #     timestep_next = ((t-h) * (sde.N - 1) / sde.T).int().to(x_t.device) # same exact thing as  timestep - 1
+    #     alpha_t = sde.alphas_cumprod.to(x_t.device)[timestep]
+    #     alpha_prev = sde.alphas_cumprod.to(x_t.device)[timestep_next]
+    #     t = t.expand(x_t.shape[0], 1)
+    #     predicted_noise = -score_network(x_t, t).detach() * torch.sqrt(1 -alpha_t)
+    #     x0_t = (x_t - (predicted_noise * torch.sqrt((1 - alpha_t)))) / torch.sqrt(alpha_t)
+    #     c1 = 0 * torch.sqrt((1 - alpha_t / alpha_prev) * (1 - alpha_prev) / (1 - alpha_t))
+    #     c2 = torch.sqrt((1 - alpha_prev) - c1 ** 2)
+    #     x_t = torch.sqrt(alpha_prev) * x0_t + c2 * predicted_noise + c1 * torch.randn_like(x_t)
+    #     if index == (len(timesteps[:-1]) - 1): return x_t
+    #
+    #     # sde = VPSDE()
+    #     # rsde = sde.reverse(score_network, probability_flow=True)
+    #     # t = time_pts[timesteps[index]]
+    #     # t_prev = time_pts[timesteps[index + 1]]
+    #     # h = t-t_prev
+    #     # dt = -h
+    #     # t = t.expand(x_t.shape[0], 1)
+    #     # drift, diffusion = rsde.sde(x_t, t)
+    #     # # euler-maruyama step
+    #     # x_t = x_t + drift * dt + diffusion * torch.randn_like(x_t) * torch.abs(dt) ** 0.5
+    #
+    #
+    #     # beta = sde.discrete_betas.to(t.device)[timestep]
+    #     # weight = 4 * beta * h # 0.0011 -> 2e-05
+    #     # _beta = 0.5* (beta(1-t_prev) + beta(1-t))
+    #     _beta = beta(1-t_prev)
+    #     # _beta = 2
+    #     weight = 2 * (1 - torch.exp(-2 * _beta * h))
+    #     # weight = 4 * h
+    #     std = sde.marginal_prob(x_t, t)[1]
+    #     # ula
+    #     for j in range(1):
+    #             t = time_pts[i]
+    #             timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
+    #             alpha = sde.alphas[timestep]
+    #
+    #             t = t.expand(x_t.shape[0], 1)
+    #             grad = score_network(x_t, t).detach() / std
+    #             term_1 = -(-2 * current_x * torch.exp(-h * _beta)) / weight
+    #             term_2 = -(2 * x_t * torch.exp(-2 * h * _beta)) / weight
+    #             grad = grad + term_1 + term_2
+    #
+    #             noise = torch.randn_like(x_t)
+    #             # step_size = torch.tensor([5e-6]).to(device)
+    #             step_size = (0.2 * std) ** 2 * 2 * alpha * 0.1#* weight * 1
+    #             print(step_size)
+    #             # step_size = torch.sqrt((0.2 * std) ** 2 * 2 * alpha * weight/200)
+    #             # step_size = weight /  2000
+    #             # step_size = torch.tensor(weight/100)
+    #             x_mean = x_t + step_size * grad
+    #             x_t = x_mean + noise * torch.sqrt(step_size * 2)
+    #     # uld
+    #     # v = torch.randn_like(x_t).to(device)
+    #     # for j in range(20):
+    #     #     t = time_pts[i]
+    #     #     timestep = (t * (sde.N - 1) / sde.T).int().to(x_t.device)
+    #     #     alpha = sde.alphas[timestep]
+    #     #
+    #     #     std = sde.marginal_prob(x_t, t)[1]
+    #     #     t = t.expand(x_t.shape[0], 1)
+    #     #     grad = score_network(x_t, t).detach() / std
+    #     #     term_1 = -(-2 * current_x * torch.exp(-h * _beta)) / weight
+    #     #     term_2 = -(2 * x_t * torch.exp(-2 * h * _beta)) / weight
+    #     #     grad = grad + term_1 + term_2
+    #     #
+    #     #     # inner_step_size = torch.tensor([5e-4]).to(device)
+    #     #     inner_step_size = (0.2 * std) ** 2 * 2 * alpha * weight
+    #     #     # inner_step_size = (0.2 * std) ** 2 * 2 * alpha
+    #     #     # inner_step_size = weight / 200
+    #     #     # step_size = torch.tensor(weight/100)
+    #     #
+    #     #     gamma =  0.1
+    #     #     x_t = x_t + v * inner_step_size
+    #     #     v = (v - gamma * v * inner_step_size
+    #     #          + grad * inner_step_size
+    #     #          + torch.sqrt(torch.tensor(2 * gamma * inner_step_size)) * torch.randn_like(v))
     return x_t
 
 samples = generate_samples(score_network, 21).detach().reshape(-1, 28, 28)
@@ -314,3 +316,10 @@ generated_samples = generated_samples.repeat(1, 3, 1, 1)
 generated_samples = generated_samples * 0.2 + 0.5
 fid = evaluate_fid_score(mnist_images, generated_samples, dim=2048, batch_size=1000)
 print(fid)
+# from scipy.stats import wasserstein_distance
+# mnist_images = mnist_images[:, 0, :, :]
+# mnist_images = mnist_images.view(-1, 28*28)
+# generated_samples = generated_samples[:, 0, :, :]
+# generated_samples = generated_samples.view(-1, 28*28)
+# distance = wasserstein_distance(mnist_images.to('cpu').numpy(), generated_samples.to('cpu').numpy())
+# print(f"The Wasserstein distance between the two distributions is: {distance}")

@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 # from hist_chessboard import *
-from hist_sprial import *
+# from hist_sprial import *
+from hist_ot_spiral import *
+# from hist_ot_chessboard import *
 # 收集 x 轴与 y 轴的数据
 # x = list(range(42, 525+21, 21))
 x = list(range(25, 525, 20))
@@ -11,7 +13,7 @@ mala = [float(x) for x in mala.strip().split()]
 mala_es = [float(x) for x in mala_es.strip().split()]
 uld = [float(x) for x in uld.strip().split()]
 ald = [float(x) for x in ald.strip().split()]
-ddim = [float(x) for x in ddim.strip().split()]
+# ddim = [float(x) for x in ddim.strip().split()]
 # 绘制折线图
 plt.plot(x, ddpm, color='blue', linewidth=3, marker='o', label='DDPM')
 # plt.plot(x, ddim, color='black', linewidth=3, marker='o', label='DDIM')
@@ -26,7 +28,8 @@ plt.plot(x, mala, color='red', linewidth=3, marker='o', label='MALA')
 # 添加标题和坐标轴标签
 # plt.title('漂亮的折线图', fontsize=20)
 plt.xlabel('Number of Function Evaluations', fontsize=16)
-plt.ylabel('Marginal Accuracy', fontsize=16)
+# plt.ylabel('Marginal Accuracy', fontsize=16)
+plt.ylabel('Wasserstein Distance', fontsize=16)
 # 显示图例
 plt.legend(fontsize=14)
 # 添加网格线

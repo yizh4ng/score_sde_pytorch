@@ -374,7 +374,7 @@ def spiral():
 
 # mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2_noise()
 # mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_high_dim_config2()
-# mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_chessboard_high_dim()
-mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = spiral()
-ground_truth_num = 50000
+mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = mog_chessboard_high_dim()
+# mus, sigmas,d, pis, grad_log_p_noise, log_p_noise = spiral()
+ground_truth_num = 5000
 synthetic_num = 5000

@@ -66,6 +66,31 @@ def calculate_kl(x, y):
     print(f"KL divergence from dist1 to dist2: {kl.item():.6f}")
     return kl.item()
 
+def calculate_wasserstein_distance(x, y):
+    import ot
+    cost_matrix = ot.dist(x[:, :2], y[:, :2]).to('cuda')
+
+    # Regularization parameter
+    # reg = 1e-5
+    reg = 1e-1
+
+    # Compute the optimal transport plan using Sinkhorn algorithm
+    transport_plan = ot.sinkhorn(torch.ones(len(x)).to('cuda') / len(x),
+                                 torch.ones(len(y)).to('cuda') / len(y),
+                                 cost_matrix, reg)
+    # transport_plan = ot.sinkhorn_unbalanced(torch.ones(len(x)).to('cuda') / len(x),
+    #                              torch.ones(len(y)).to('cuda') / len(y),
+    #                              cost_matrix, reg, reg)
+    # transport_plan = ot.smooth.smooth_ot_dual(torch.ones(len(x)).to('cuda') / len(x),
+    #                              torch.ones(len(y)).to('cuda') / len(y), cost_matrix, reg)
+
+    # transport_plan = ot.emd(torch.ones(len(x)).to('cuda') / len(x),
+    #                              torch.ones(len(y)).to('cuda') / len(y),
+    #                              cost_matrix)
+
+    # Calculate the Wasserstein distance (cost)
+    wasserstein_distance = torch.sum(transport_plan * cost_matrix)
+    return wasserstein_distance
 
 def visualize_hist(x, title, save_path=None):
     hist = torch.histc(x, bins = 50, min = -5, max = 5).to('cpu')

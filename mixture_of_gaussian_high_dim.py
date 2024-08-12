@@ -5,7 +5,7 @@ from tqdm import tqdm
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-from mog_util.misc import visualize_cluster
+from mog_util.misc import visualize_cluster, calculate_wasserstein_distance
 from mog_util.misc_high_dim import estimate_marginal_accuracy
 from mog_util.reverse_step_high_dim import *
 import warnings
@@ -27,10 +27,11 @@ weight_scale = [1]
 reverse_fucs = ['DDPM']
 # total_steps = [40, 100, 200, 500]
 # total_steps = [42, 105, 210, 525]
-# total_steps, vis = list(range(25, 525, 20)), False
+total_steps, vis = list(range(25, 525, 20)), False
+# total_steps, vis = list(range(1, 1+25*1, 1)), False
 # total_steps, vis = list(range(50, 1000, 20)), False
 # total_steps, vis = [2000], True
-total_steps, vis = [205], True
+# total_steps, vis = [205], True
 # total_steps, vis = [1000], True
 mcmc_steps  = [None]
 mcmc_step_sizes_scale = [None]
@@ -50,9 +51,10 @@ df = pd.DataFrame(columns=['reverse_fuc', 'total_step', 'mcmc_step', 'mcmc_step_
 for parameters in parameters_combinations:
     reverse_fuc, total_step, mcmc_step, mcmc_step_size_scale, init, weight_scale = parameters
     reverse_fuc = reverse_step_dict[reverse_fuc]
-    x = torch.randn([50000, d]).to('cuda')
+    x = torch.randn([5000, d]).to('cuda')
     pbar = tqdm(total=1000, leave=False)
     for t in reversed(np.append(np.linspace(0, 1000, total_step, endpoint=False)[1:], 1000)):
+    # for t in reversed(np.linspace(0, , total_step, endpoint=False)[1:]):
     # for t in reversed(linespace(0, 1000, total_step)[1:]):
         x = reverse_fuc(x, t, step_size=1000/total_step, mcmc_steps=mcmc_step,
                     mcmc_step_size_scale=mcmc_step_size_scale, init=init, weight_scale=weight_scale)
@@ -63,7 +65,8 @@ for parameters in parameters_combinations:
         visualize(x, y, f'{parameters[0]}')
 
 
-    mc = estimate_marginal_accuracy(y, x, num_bins=200)
+    # mc = estimate_marginal_accuracy(y, x, num_bins=200)
+    mc = calculate_wasserstein_distance(x,y)
 
 
     if parameters[0] in ['DDPM', 'DDIM', 'SDE', 'ODE']:
